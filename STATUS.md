@@ -23,7 +23,8 @@ Atualizado: 05/10/2026, noite (segunda, dia 1 do Hackyard).
   - Ainda não testados no real: lixeira, missão, descadastro (one-click, mailto, link) e chefões.
 
 ## Próximo passo
-1. Achar a caixa do vídeo: a lojadares tem 3 e-mails, a josemardp ~200. Medir esdraaline? (só com autorização da dona). Alternativa: gravar na josemardp com privacidade ligada.
+1. **Gravação: terça 06/10 às 19:00**, na caixa **josemardp** com privacidade ligada (decisão do Josemar). Ele joga no Chrome dele, Claude grava a tela com ffmpeg. Até lá, não limpar a caixa da josemardp.
+1b. Auditoria externa (Codex e Antigravity) com o prompt de auditoria; revisar o relatório quando o Josemar colar de volta.
 2. Testar descadastro real num remetente de marketing.
 3. Speedrun até qua 07/10 15:00: README com GIF + vídeo v1 + entrega no Hackyard.
    - Varredura: `messages.list` em `in:inbox` + metadados (From, Subject, Date, List-Unsubscribe, List-Unsubscribe-Post).
