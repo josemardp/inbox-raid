@@ -14,8 +14,12 @@ Atualizado: 05/10/2026, noite (segunda, dia 1 do Hackyard).
 - Site no ar conferido em 05/10 21:33: partida completa até INBOX ZERO, sem erro no console.
 - Publicação atrasou ~40 min por falha geral do GitHub Actions (não era erro do projeto).
 
-## Próximo passo (M2, terça 06/10)
-1. `src/gmailSource.ts` **já escrito e compilando, ainda não ligado à interface nem testado**. Falta: botão "RAID MY GMAIL" chamar `signIn()` e `startRaid(new GmailSource(token))`, e testar com o Josemar autorizando o acesso.
+- 05/10 noite: Gmail real **ligado** ao botão "RAID MY GMAIL" (tecla G) e modo privacidade (tecla P) no ar.
+  - Testado: login do Google abre com o cliente e a origem certos (sem erro de configuração). Privacidade tarja pessoas.
+  - **Não testado ainda:** varredura e ações numa caixa real. Depende do Josemar autorizar o acesso.
+
+## Próximo passo
+1. Primeiro teste real na conta lojadares: autorizar, varrer, 1 chefão arquivado + desfazer, conferir no Gmail.
    - Varredura: `messages.list` em `in:inbox` + metadados (From, Subject, Date, List-Unsubscribe, List-Unsubscribe-Post).
    - Ações em lote com `messages.batchModify` (arquivar = tirar INBOX; lixeira = TRASH; missão = STARRED e tirar INBOX).
    - Descadastro: one-click POST, mailto pelo Gmail, ou abrir link.
