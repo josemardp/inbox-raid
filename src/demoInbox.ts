@@ -1,0 +1,141 @@
+import type { Mail } from './types';
+
+// A fake but painfully familiar inbox. All senders are fictional (.example domains).
+
+interface BossSeed {
+  name: string;
+  email: string;
+  count: number;
+  subjects: string[];
+}
+
+const BOSSES: BossSeed[] = [
+  {
+    name: 'MegaMart Deals', email: 'deals@megamart.example', count: 142,
+    subjects: [
+      'FLASH SALE: 70% off things you do not need',
+      'Your cart misses you',
+      'Last chance! (again)',
+      'An exclusive deal just for you (and 4 million others)',
+      'We noticed you looked at a toaster',
+      'Weekend MEGA BLOWOUT!!!',
+    ],
+  },
+  {
+    name: 'LinkedOut', email: 'notifications@linkedout.example', count: 96,
+    subjects: [
+      'You appeared in 3 searches this week',
+      'A stranger endorsed you for Microsoft Word',
+      'Congratulate Brad on his 7th work anniversary',
+      '5 people viewed your profile (pay to see who)',
+      'Brad posted: "I cried in a board meeting. Here is what it taught me about B2B sales"',
+    ],
+  },
+  {
+    name: 'The Daily Hustle', email: 'hello@dailyhustle.example', count: 61,
+    subjects: [
+      'Wake up at 4am: 17 habits of billionaires',
+      'This one morning routine changed everything',
+      'Issue #412: Grind mindset',
+      'Are you hustling hard enough?',
+    ],
+  },
+  {
+    name: 'CloudBox', email: 'no-reply@cloudbox.example', count: 38,
+    subjects: [
+      'Your storage is 99% full',
+      'Your storage is 99.5% full',
+      'Your storage is 99.9% full',
+      'Upgrade now or lose your memories forever',
+    ],
+  },
+  {
+    name: 'Pizza Palace', email: 'yum@pizzapalace.example', count: 27,
+    subjects: [
+      '2-for-1 Tuesday (it is Thursday)',
+      'Hungry? We can tell.',
+      'Your pizza misses you',
+    ],
+  },
+  {
+    name: 'Moonshot Crypto Weekly', email: 'alpha@moonshot.example', count: 19,
+    subjects: [
+      'This coin will 100x (not financial advice)',
+      'WAGMI: our top 3 picks',
+      'Why the dip is actually good news',
+    ],
+  },
+];
+
+const HORDE: [string, string, string, string][] = [
+  ['Mom', 'mom@family.example', 'Did you eat today?', 'Call me when you can. Also, did you eat today? Real food?'],
+  ['Karen (Your Boss)', 'karen@work.example', 'Quick sync?', 'Can you jump on a call in 5? It is urgent but also not really.'],
+  ['Prince Adebayo', 'prince@royal-funds.example', 'URGENT BUSINESS PROPOSAL', 'I am a prince with 24 million dollars and you are my only hope.'],
+  ['IT Department', 'it@work.example', 'Mandatory password change (again)', 'Your new password must not match any of your last 400 passwords.'],
+  ['Calendar', 'calendar@work.example', 'Invitation: Meeting about the meeting', 'Agenda: discuss the agenda for the upcoming meeting.'],
+  ['Smile Dental', 'office@smiledental.example', 'Time for your 6-month cleaning', 'It has been 14 months. We are worried.'],
+  ['Gym Pro', 'team@gympro.example', 'We miss you! (It has been 214 days)', 'Your membership is still active. Your abs are not.'],
+  ['Landlord', 'mgmt@building.example', 'Water off on Tuesday, 9 to 11am', 'Plan your showers accordingly.'],
+  ['Bank of Somewhere', 'statements@bank.example', 'Your statement is ready', 'Your monthly statement is available. Brace yourself.'],
+  ['SkyHigh Air', 'feedback@skyhigh.example', 'Rate your flight (from 2019)', 'How was your experience? We would love to hear from you.'],
+  ['Grandma', 'grandma@family.example', 'FW: FW: FW: FW: FUNNY CATS!!!', 'LOOK AT THIS ONE HAHAHA'],
+  ['Dave (Coworker)', 'dave@work.example', 'RE: Reply-all: Thanks!', 'Thanks!'],
+  ['Sarah (Coworker)', 'sarah@work.example', 'RE: Please stop replying all', 'Please stop replying all.'],
+  ['HR Team', 'hr@work.example', 'Mandatory Fun Day is mandatory', 'Attendance will be tracked. Fun is required.'],
+  ['TalentBot', 'jobs@talentbot.example', 'Exciting role: Senior Junior Intern (unpaid)', '15 years of experience with a framework released last year.'],
+  ['LearnFast', 'progress@learnfast.example', 'You are 2% through "Spanish in 7 Days"', 'Day 1 of 7. Started 11 months ago.'],
+  ['Smart Fridge', 'firmware@fridge.example', 'Your fridge updated its terms of service', 'By keeping food cold, you agree to the new terms.'],
+  ['Survey Team', 'survey@feedback.example', 'Quick 45-minute survey', 'It will only take 45 minutes of your time.'],
+  ['Synergy Webinars', 'live@synergy.example', 'Starting NOW: Synergy at scale', 'Join 3 other attendees for 2 hours of synergy.'],
+  ['Alex (Old Friend)', 'alex@friends.example', 'Long time no see!', 'Coffee next week? I am in town until Friday.'],
+  ['ParcelGo', 'tracking@parcelgo.example', 'Your package was delivered (somewhere)', 'We left it in a safe place. We will not say where.'],
+  ['City Parking', 'tickets@city.example', 'Parking ticket reminder', 'Ticket #4471 is due in 5 days.'],
+  ['Maple School', 'office@maple.example', 'Parent-teacher meeting on Friday', 'Please confirm your attendance.'],
+  ['Unknown Community', 'welcome@unknown.example', 'Welcome to the community!', 'Thanks for joining! (You did not join.)'],
+  ['Accounts Dept', 'invoice@totally-legit.example', 'RE: RE: RE: your invoice', 'Open the attached invoice.zip.exe immediately.'],
+  ['PowerCo', 'billing@powerco.example', 'Your bill is due in 3 days', 'Amount due: more than last month.'],
+  ['City Clinic', 'results@clinic.example', 'Your lab results are available', 'Log in to the patient portal to view them.'],
+  ['Streamly+', 'billing@streamly.example', 'Your free trial ends tomorrow', 'After that it is only $19.99/month forever.'],
+  ['Auntie Rose', 'rose@family.example', 'Family reunion photos (847 attachments)', 'Sorry some are blurry. Most are blurry.'],
+  ['Neighbor Tom', 'tom@street.example', 'Is this your cat?', 'It has been sitting on my car for 3 hours. It seems happy.'],
+  ['Hackyard', 'hello@hackyard.example', 'Yard #4 kicks off now', 'Build solo, any AI model. Ship by Friday.'],
+];
+
+// Deterministic PRNG so the demo looks the same every time (mulberry32).
+function rng(seed: number) {
+  return () => {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const DAY = 86_400_000;
+
+export function buildDemoInbox(now = Date.now()): Mail[] {
+  const rand = rng(4);
+  const mails: Mail[] = [];
+  let n = 0;
+  for (const b of BOSSES) {
+    for (let i = 0; i < b.count; i++) {
+      mails.push({
+        id: `demo-${n++}`,
+        fromName: b.name,
+        fromEmail: b.email,
+        subject: b.subjects[i % b.subjects.length],
+        snippet: '',
+        date: now - Math.floor(rand() * 120 * DAY),
+        listUnsubscribe: `<https://${b.email.split('@')[1]}/unsubscribe>`,
+        oneClickUnsub: true,
+      });
+    }
+  }
+  HORDE.forEach(([name, email, subject, snippet]) => {
+    mails.push({
+      id: `demo-${n++}`, fromName: name, fromEmail: email, subject, snippet,
+      date: now - Math.floor(rand() * 20 * DAY),
+    });
+  });
+  return mails.sort((a, b) => b.date - a.date);
+}
