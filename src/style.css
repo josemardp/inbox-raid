@@ -222,6 +222,10 @@ canvas.monster.small { width: 44px; height: 36px; }
 .quests ul { list-style: none; padding: 0; margin: 10px 0 0; font-size: 9px; line-height: 2; }
 .quests b { color: var(--yellow); font-weight: normal; }
 .proof { margin: 0; font-size: 9px; color: var(--cyan); line-height: 1.9; }
+.proof a { color: var(--yellow); }
+
+/* Privacy mode: same length as the real text, unreadable. */
+.redact { color: transparent; background: repeating-linear-gradient(90deg, #44447a 0 8px, #2c2c5a 8px 10px); border-radius: 0; user-select: none; }
 
 /* ---------- overlays ---------- */
 

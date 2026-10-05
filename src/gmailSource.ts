@@ -27,6 +27,11 @@ function loadGis(): Promise<GoogleOAuth> {
   });
 }
 
+/** Loads Google's script early, so the popup opens inside the click and is not blocked. */
+export function preloadGoogle() {
+  loadGis().catch(() => { /* retried on sign-in */ });
+}
+
 /** Opens Google's consent popup. Must be called from a click or key press. */
 export async function signIn(): Promise<string> {
   const google = await loadGis();
@@ -81,7 +86,7 @@ export class GmailSource implements InboxSource {
     return res.status === 204 ? (undefined as T) : res.json();
   }
 
-  async load(onProgress: (loaded: number) => void): Promise<Mail[]> {
+  async load(onProgress: (loaded: number, total: number) => void): Promise<Mail[]> {
     const ids: string[] = [];
     let pageToken = '';
     do {
@@ -93,9 +98,11 @@ export class GmailSource implements InboxSource {
     } while (pageToken && ids.length < MAX_MAILS);
 
     const mails: Mail[] = [];
+    const todo = ids.slice(0, MAX_MAILS);
+    onProgress(0, todo.length);
     const meta = ['From', 'Subject', 'Date', 'List-Unsubscribe', 'List-Unsubscribe-Post']
       .map((h) => `metadataHeaders=${encodeURIComponent(h)}`).join('&');
-    await pool(ids.slice(0, MAX_MAILS), CONCURRENCY, async (id) => {
+    await pool(todo, CONCURRENCY, async (id) => {
       const m = await this.call<{ id: string; snippet: string; internalDate: string; payload: { headers: { name: string; value: string }[] } }>(
         `/messages/${id}?format=metadata&${meta}`);
       const h = m.payload.headers;
@@ -110,9 +117,9 @@ export class GmailSource implements InboxSource {
         listUnsubscribe: header(h, 'List-Unsubscribe') || undefined,
         oneClickUnsub: /one-click/i.test(header(h, 'List-Unsubscribe-Post')),
       });
-      if (mails.length % 10 === 0) onProgress(mails.length);
+      if (mails.length % 10 === 0) onProgress(mails.length, todo.length);
     });
-    onProgress(mails.length);
+    onProgress(mails.length, todo.length);
     return mails.sort((a, b) => b.date - a.date);
   }
 

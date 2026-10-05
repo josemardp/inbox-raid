@@ -8,14 +8,14 @@ export class DemoSource implements InboxSource {
   readonly label = 'DEMO INBOX';
   readonly isDemo = true;
 
-  async load(onProgress: (loaded: number) => void): Promise<Mail[]> {
+  async load(onProgress: (loaded: number, total: number) => void): Promise<Mail[]> {
     const mails = buildDemoInbox();
     // Fake a scan so the counter has something to do.
     for (let i = 0; i <= mails.length; i += 23) {
-      onProgress(Math.min(i, mails.length));
+      onProgress(Math.min(i, mails.length), mails.length);
       await wait(30);
     }
-    onProgress(mails.length);
+    onProgress(mails.length, mails.length);
     return mails;
   }
 

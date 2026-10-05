@@ -1,6 +1,7 @@
 import './style.css';
 import { comboSfx, drainSfx, fanfare, isMuted, music, sfx, toggleMute, unlockAudio } from './audio';
 import { DemoSource } from './demoSource';
+import { GmailSource, preloadGoogle, signIn } from './gmailSource';
 import { burst, centreOf, flash, floatText, initFx, shake, stamp } from './fx';
 import { Raid, splitInbox, type BossMove, type Hit, type HordeMove } from './raid';
 import { colorFor, drawMonster, PALETTE } from './sprites';
@@ -29,6 +30,18 @@ function esc(s: string): string {
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
+
+// Privacy mode: people (senders without an unsubscribe header) are blacked out,
+// so a raid can be recorded or streamed without exposing anyone.
+let privacy = false;
+try { privacy = localStorage.getItem('inbox-raid-privacy') === '1'; } catch { /* storage blocked */ }
+
+const isPerson = (m: Mail) => !m.listUnsubscribe;
+
+/** Escaped text, blacked out when privacy mode hides it. */
+function shown(text: string, hide: boolean): string {
+  return hide && privacy ? `<span class="redact">${esc(text)}</span>` : esc(text);
+}
 
 function clock(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -145,10 +158,12 @@ function showTitle() {
   controls.innerHTML = `
     <div class="row">
       ${button('ENTER', 'PLAY DEMO', 'demo', 'primary')}
-      ${button('G', 'RAID MY GMAIL', 'gmail', '', true)}
+      ${button('G', 'RAID MY GMAIL', 'gmail')}
+      ${button('P', `PRIVACY ${privacy ? 'ON' : 'OFF'}`, 'privacy', 'ghost')}
     </div>
-    <p class="fine">Demo uses a fake inbox. Gmail mode lands Tuesday. 100% in your browser, no server.</p>`;
+    <p class="fine">Demo uses a fake inbox. Gmail mode runs 100% in your browser, no server,<br>and is invite-only while Google reviews the app. Privacy mode blacks out people.</p>`;
   animateMonsters();
+  preloadGoogle();
 }
 
 async function startRaid(src: InboxSource) {
@@ -162,11 +177,19 @@ async function startRaid(src: InboxSource) {
       <div class="scan-bar"><i id="scan-fill"></i></div>
     </section>`;
   controls.innerHTML = '';
-  const mails = await src.load((n) => {
-    $('#scan-n').textContent = fmt(n);
-    $('#scan-fill').style.width = `${Math.min(100, (n / 420) * 100)}%`;
-    sfx('tick', 1 + (n % 50) / 50);
-  });
+  let mails: Mail[];
+  try {
+    mails = await src.load((n, total) => {
+      $('#scan-n').textContent = fmt(n);
+      $('#scan-fill').style.width = `${total ? Math.min(100, (n / total) * 100) : 0}%`;
+      sfx('tick', 1 + (n % 50) / 50);
+    });
+  } catch (err) {
+    console.error(err);
+    toast('Could not read the inbox. Try again.');
+    showTitle();
+    return;
+  }
   $('#scan-fill').style.width = '100%';
   const { bosses, horde } = splitInbox(mails);
   raid = new Raid(bosses, horde);
@@ -207,14 +230,15 @@ function showBoss() {
   const hp = boss.mails.length;
   const samples = [...new Set(boss.mails.map((m) => m.subject))].slice(0, 3);
   const canUnsub = boss.mails.some((m) => m.listUnsubscribe);
+  const hide = !canUnsub;
   screen.innerHTML = `
     <section class="boss" style="--c:${color}">
       <p class="label">BOSS ${r.bossIdx + 1} / ${r.bosses.length}</p>
       <div class="boss-sprite">${monster(boss.key, 11, 9, 'big')}</div>
-      <h2 class="boss-name">${esc(boss.name)}</h2>
-      <p class="boss-email">${esc(boss.email)}</p>
+      <h2 class="boss-name">${shown(boss.name, hide)}</h2>
+      <p class="boss-email">${shown(boss.email, hide)}</p>
       <div class="hp"><span>HP</span><div class="hp-bar"><i id="hp-fill"></i></div><b id="hp-n">${fmt(hp)}</b></div>
-      <ul class="attacks">${samples.map((s) => `<li>&gt; ${esc(s)}</li>`).join('')}</ul>
+      <ul class="attacks">${samples.map((s) => `<li>&gt; ${shown(s, hide)}</li>`).join('')}</ul>
       ${canUnsub ? '<p class="tag">UNSUBSCRIBE AVAILABLE: CRITICAL HIT</p>' : '<p class="tag dim">No unsubscribe link from this sender</p>'}
     </section>`;
   controls.innerHTML = `
@@ -305,11 +329,12 @@ function showHorde() {
 
 function card(m: Mail): string {
   const c = colorFor(m.fromEmail);
+  const hide = isPerson(m);
   return `
     <article class="card live" style="--c:${c}">
-      <header>${monster(m.fromEmail, 11, 9, 'small')}<div><b>${esc(m.fromName)}</b><small>${esc(m.fromEmail)}</small></div><time>${ago(m.date)}</time></header>
-      <h3>${esc(m.subject || '(no subject)')}</h3>
-      ${m.snippet ? `<p>${esc(m.snippet)}</p>` : ''}
+      <header>${monster(m.fromEmail, 11, 9, 'small')}<div><b>${shown(m.fromName, hide)}</b><small>${shown(m.fromEmail, hide)}</small></div><time>${ago(m.date)}</time></header>
+      <h3>${shown(m.subject || '(no subject)', hide)}</h3>
+      ${m.snippet ? `<p>${shown(m.snippet, hide)}</p>` : ''}
     </article>`;
 }
 
@@ -366,10 +391,10 @@ async function showClear() {
       </dl>
       ${r.quests.length ? `
         <div class="quests"><p class="label">QUEST LOG &middot; starred, waiting for you in Starred</p>
-        <ul>${r.quests.map((m) => `<li>&#9733; <b>${esc(m.fromName)}</b> ${esc(m.subject)}</li>`).join('')}</ul></div>` : ''}
+        <ul>${r.quests.map((m) => `<li>&#9733; <b>${shown(m.fromName, isPerson(m))}</b> ${shown(m.subject, isPerson(m))}</li>`).join('')}</ul></div>` : ''}
       <p class="proof">${source.isDemo
         ? 'Demo mode: nothing real was touched. Imagine this was your inbox.'
-        : 'This was your real inbox. Go check it.'}</p>
+        : 'This was your real inbox. <a href="https://mail.google.com/mail/u/0/#inbox" target="_blank" rel="noopener">Go check it &rarr;</a>'}</p>
     </section>`;
   controls.innerHTML = `
     <div class="row">
@@ -445,6 +470,14 @@ function act(action: string) {
   switch (view) {
     case 'title':
       if (action === 'demo') { sfx('select'); startRaid(new DemoSource()); }
+      if (action === 'gmail') raidGmail();
+      if (action === 'privacy') {
+        privacy = !privacy;
+        try { localStorage.setItem('inbox-raid-privacy', privacy ? '1' : '0'); } catch { /* storage blocked */ }
+        sfx('select');
+        toast(privacy ? 'PRIVACY ON: people are blacked out' : 'PRIVACY OFF');
+        showTitle();
+      }
       break;
     case 'boss':
       if (['archive', 'unsubscribe', 'trash', 'spare'].includes(action)) bossMove(action as BossMove);
@@ -465,8 +498,21 @@ function act(action: string) {
   }
 }
 
+/** Google's consent popup needs a user gesture, so this runs straight from the click or key. */
+async function raidGmail() {
+  sfx('select');
+  toast('Opening Google sign-in...');
+  try {
+    const token = await signIn();
+    startRaid(new GmailSource(token));
+  } catch (err) {
+    console.error(err);
+    toast('Sign-in cancelled or blocked');
+  }
+}
+
 const KEYS: Record<string, Record<string, string>> = {
-  title: { Enter: 'demo', ' ': 'demo' },
+  title: { Enter: 'demo', ' ': 'demo', g: 'gmail', p: 'privacy' },
   boss: { a: 'archive', u: 'unsubscribe', d: 'trash', s: 'spare', ArrowLeft: 'archive', ArrowDown: 'trash' },
   horde: { ArrowLeft: 'archive', a: 'archive', ArrowDown: 'trash', d: 'trash', ArrowRight: 'star', s: 'star' },
   clear: { r: 'again', Enter: 'again', Escape: 'title' },

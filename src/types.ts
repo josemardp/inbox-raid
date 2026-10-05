@@ -23,7 +23,7 @@ export interface UnsubResult {
 export interface InboxSource {
   readonly label: string;
   readonly isDemo: boolean;
-  load(onProgress: (loaded: number) => void): Promise<Mail[]>;
+  load(onProgress: (loaded: number, total: number) => void): Promise<Mail[]>;
   archive(ids: string[]): Promise<void>;
   trash(ids: string[]): Promise<void>;
   /** Quest: star it and take it out of the inbox, so it waits in Starred. */
