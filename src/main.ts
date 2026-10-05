@@ -16,6 +16,8 @@ initFx($<HTMLCanvasElement>('#fx'), $('#stage'));
 let source: InboxSource = new DemoSource();
 let raid: Raid | null = null;
 let busy = false;
+/** Last key pressed during an animation; it runs as soon as the animation ends. */
+let queued: string | null = null;
 let view: 'title' | 'scan' | 'boss' | 'horde' | 'clear' = 'title';
 let monsterTimer = 0;
 
@@ -186,12 +188,15 @@ async function startRaid(src: InboxSource) {
   next();
 }
 
-/** Routes to whatever the raid needs next. */
+/** Routes to whatever the raid needs next, then runs a key the player pressed meanwhile. */
 function next() {
   if (!raid) return;
   if (raid.phase === 'boss') showBoss();
   else if (raid.phase === 'horde') showHorde();
-  else showClear();
+  else { queued = null; showClear(); return; }
+  const q = queued;
+  queued = null;
+  if (q) act(q);
 }
 
 function showBoss() {
@@ -343,8 +348,9 @@ async function showClear() {
     best = Number(localStorage.getItem('inbox-raid-best') || 0);
     if (r.score > best) localStorage.setItem('inbox-raid-best', String(r.score));
   } catch { /* storage blocked */ }
-  const cleared = r.stats.archived + r.stats.trashed;
-  const zero = r.inboxLeft - r.quests.length <= 0;
+  const cleared = r.stats.archived + r.stats.trashed + r.stats.starred;
+  const zero = r.inboxLeft === 0;
+  $('#combo').textContent = '';
   screen.innerHTML = `
     <section class="clear">
       <h1 class="logo small"><span>${zero ? 'INBOX ZERO' : 'STAGE CLEAR'}</span></h1>
@@ -359,7 +365,7 @@ async function showClear() {
         <div><dt>SCORE</dt><dd>${fmt(r.score)}</dd></div>
       </dl>
       ${r.quests.length ? `
-        <div class="quests"><p class="label">QUEST LOG &middot; these need you for real</p>
+        <div class="quests"><p class="label">QUEST LOG &middot; starred, waiting for you in Starred</p>
         <ul>${r.quests.map((m) => `<li>&#9733; <b>${esc(m.fromName)}</b> ${esc(m.subject)}</li>`).join('')}</ul></div>` : ''}
       <p class="proof">${source.isDemo
         ? 'Demo mode: nothing real was touched. Imagine this was your inbox.'
@@ -432,6 +438,10 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function act(action: string) {
   unlockAudio();
+  if (busy && (view === 'boss' || view === 'horde') && action !== 'mute') {
+    queued = action;
+    return;
+  }
   switch (view) {
     case 'title':
       if (action === 'demo') { sfx('select'); startRaid(new DemoSource()); }

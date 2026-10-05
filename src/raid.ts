@@ -142,7 +142,8 @@ export class Raid {
     if (move === 'archive') this.stats.archived++;
     else if (move === 'trash') this.stats.trashed++;
     else { this.stats.starred++; this.quests.push(mail); }
-    this.inboxLeft -= move === 'star' ? 0 : 1;
+    // A quest is starred and archived: it leaves the inbox and waits in Starred.
+    this.inboxLeft -= 1;
     this.score += points;
     this.afterAction();
     this.hordeIdx++;

@@ -32,12 +32,11 @@ function grids(key: string, w: number, h: number): boolean[][][] {
     for (let x = half - (w % 2 ? 2 : 1); x >= 0; x--) row.push(row[x]);
     base.push(row);
   }
-  // Solid core and two eyes.
+  // Solid head around the eyes, so every monster has a face.
   const cx = Math.floor(w / 2), eyeY = Math.floor(h * 0.35), ex = Math.max(1, Math.floor(w / 4));
   for (let y = 1; y < h - 1; y++) base[y][cx] = true;
-  for (let x = cx - ex - 1; x <= cx + ex + 1; x++) base[eyeY][x] = true;
-  base[eyeY][cx - ex] = false;
-  base[eyeY][cx + ex] = false;
+  for (let y = eyeY - 1; y <= eyeY + 2; y++)
+    for (let x = cx - ex - 1; x <= cx + ex + 1; x++) base[y][x] = true;
   // Legs: alternate columns on the last row, swapped between the two frames.
   const last = h - 1;
   const alt = base.map((row) => [...row]);
@@ -59,4 +58,12 @@ export function drawMonster(canvas: HTMLCanvasElement, key: string, w = 11, h = 
   ctx.clearRect(0, 0, w, h);
   ctx.fillStyle = color;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (g[y][x]) ctx.fillRect(x, y, 1, 1);
+  // Face: white eyes that blink between frames, and a dark mouth.
+  const cx = Math.floor(w / 2), eyeY = Math.floor(h * 0.35), ex = Math.max(1, Math.floor(w / 4));
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(cx - ex, eyeY, 1, 1);
+  ctx.fillRect(cx + ex, eyeY, 1, 1);
+  ctx.fillStyle = '#0b0b1e';
+  ctx.fillRect(cx - ex + 1, eyeY + 2, 2 * ex - 1, 1);
+  if (frame % 2) ctx.fillRect(cx, eyeY + 1, 1, 1);
 }

@@ -26,6 +26,7 @@ export interface InboxSource {
   load(onProgress: (loaded: number) => void): Promise<Mail[]>;
   archive(ids: string[]): Promise<void>;
   trash(ids: string[]): Promise<void>;
+  /** Quest: star it and take it out of the inbox, so it waits in Starred. */
   star(ids: string[]): Promise<void>;
   unsubscribe(sample: Mail): Promise<UnsubResult>;
   /** Puts emails back in the inbox exactly as before the action. */
