@@ -289,6 +289,7 @@ canvas.monster.small { width: 44px; height: 36px; }
   .combo { font-size: 8px; }
   .row { display: grid; grid-template-columns: 1fr 1fr; width: 100%; gap: 10px; }
   .btn { justify-content: center; padding: 10px 8px; font-size: 10px; min-height: 56px; }
+  .btn kbd { display: none; }
   canvas.monster.big { width: 150px; height: 122px; }
   canvas.parade { width: 33px; height: 27px; }
   .parade-row { gap: 10px; }
