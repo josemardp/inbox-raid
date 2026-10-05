@@ -16,10 +16,16 @@ Atualizado: 05/10/2026, noite (segunda, dia 1 do Hackyard).
 
 - 05/10 noite: Gmail real **ligado** ao botão "RAID MY GMAIL" (tecla G) e modo privacidade (tecla P) no ar.
   - Testado: login do Google abre com o cliente e a origem certos (sem erro de configuração). Privacidade tarja pessoas.
-  - **Não testado ainda:** varredura e ações numa caixa real. Depende do Josemar autorizar o acesso.
+- **05/10 19:50: modo real testado na conta lojadares** (autorizado pelo Josemar, pelo navegador `nav-lojadares`).
+  - Varredura leu a caixa real: só 3 e-mails, nenhum chefão (a lojadares é quase vazia).
+  - Arquivar um e-mail real (Magalu): sumiu de `in:inbox` no Gmail. Desfazer (Z): voltou para a Caixa de entrada, ainda não lido. Conferido no Gmail web nas duas pontas.
+  - Os erros "Cross-Origin-Opener-Policy" no console vêm da biblioteca do Google e são inofensivos.
+  - Ainda não testados no real: lixeira, missão, descadastro (one-click, mailto, link) e chefões.
 
 ## Próximo passo
-1. Primeiro teste real na conta lojadares: autorizar, varrer, 1 chefão arquivado + desfazer, conferir no Gmail.
+1. Achar a caixa do vídeo: a lojadares tem 3 e-mails, a josemardp ~200. Medir esdraaline? (só com autorização da dona). Alternativa: gravar na josemardp com privacidade ligada.
+2. Testar descadastro real num remetente de marketing.
+3. Speedrun até qua 07/10 15:00: README com GIF + vídeo v1 + entrega no Hackyard.
    - Varredura: `messages.list` em `in:inbox` + metadados (From, Subject, Date, List-Unsubscribe, List-Unsubscribe-Post).
    - Ações em lote com `messages.batchModify` (arquivar = tirar INBOX; lixeira = TRASH; missão = STARRED e tirar INBOX).
    - Descadastro: one-click POST, mailto pelo Gmail, ou abrir link.
