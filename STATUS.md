@@ -29,6 +29,20 @@ Atualizado: 05/10/2026, noite (segunda, dia 1 do Hackyard).
   - **Lixeira testada no Gmail real (lojadares):** `batchModify` com TRASH respondeu 204, como diz a doc do Google (o Antigravity dizia 400; estava errado). Desfazer: e-mail de volta na caixa, não lido, conferido no Gmail web.
   - `npm test`: 24 testes passando.
 
+- **06/10 manhã:** cartão para compartilhar (tecla C, 1200x630, sem nomes nem assuntos), GIF no topo do README, modo `?rec` que grava o som do jogo a partir do FIGHT! e baixa `inbox-raid-audio.webm` no fim.
+  - Hackyard (página lida): entregar de novo substitui a entrega anterior. Campos: repo (obrigatório), vídeo, texto até 500, modelo de IA (obrigatório: Claude Code), recibo opcional.
+  - Vídeo v0 (só Demo, 38 s, legendas + cartão final + som sincronizado) montado e conferido; fica de reserva para o Speedrun.
+  - Ferramentas de captura e edição ficam fora do repo (scratchpad da sessão): `capture.mjs` (Playwright + Chrome), `captions.mjs` (legendas PNG na fonte do jogo), filtro ffmpeg 9 (`-/filter_complex arquivo`).
+
+## Roteiro da gravação (terça 19:00, caixa josemardp)
+1. Chrome do Josemar em tela cheia, **zoom 150%**. Abrir `https://josemardp.github.io/inbox-raid/?rec`.
+2. Claude inicia a gravação de tela (ffmpeg gdigrab, 1920x1080, 30 fps).
+3. Plano 1: Gmail da josemardp com a caixa cheia (5 s). Não mostrar o endereço da conta.
+4. Plano 2: jogo. Apertar **P** (privacidade) antes, depois **G**, autorizar, esperar a varredura (~1 a 2 min, cortada na edição).
+5. Jogar: chefões com U quando houver descadastro, A ou D nos demais, S para quem não pode sumir. Horda: setas; missão (→) para o que precisa de resposta.
+6. No fim, apertar **C** (cartão) e voltar ao Gmail: caixa vazia.
+7. O áudio do jogo baixa sozinho (`inbox-raid-audio.webm`); a edição junta pelo FIGHT!.
+
 ## Próximo passo
 1. **Gravação: terça 06/10 às 19:00**, na caixa **josemardp** com privacidade ligada (decisão do Josemar). Ele joga no Chrome dele, Claude grava a tela com ffmpeg. Até lá, não limpar a caixa da josemardp.
 1b. Auditoria externa (Codex e Antigravity) com o prompt de auditoria; revisar o relatório quando o Josemar colar de volta.
