@@ -2,6 +2,8 @@
 
 > Every enemy you kill is an email that really leaves your inbox.
 
+![Inbox Raid: unsubscribing a boss and a max combo in the horde](docs/demo.gif)
+
 An arcade raid on your real inbox. Senders who flood you become **bosses** whose HP is the number of emails they sent. Archive them in one hit, or unsubscribe and they die forever. Then clear the **horde** of single emails with combos before your stress bar fills.
 
 Built for **Hackyard Yard #4: Gamification** (Oct 5 to 9, 2026). The rule of the yard: the real chore has to get done. Here it does. The game *is* the inbox.
@@ -15,7 +17,7 @@ Built for **Hackyard Yard #4: Gamification** (Oct 5 to 9, 2026). The rule of the
 | Trash all | `D` | Quest (star + archive) | `→` |
 | Spare | `S` | Undo | `Z` |
 
-`M` sound, `P` privacy mode, `Esc` quit. On a phone, tap the buttons or swipe the card.
+`M` sound, `P` privacy mode, `Esc` quit. On a phone, tap the buttons or swipe the card. When the raid ends, `C` saves a share card with your numbers (no subjects, no names).
 
 ## Two ways to play
 
