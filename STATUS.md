@@ -1,6 +1,8 @@
 # STATUS: INBOX RAID
 
-Atualizado: 05/10/2026, noite (segunda, dia 1 do Hackyard).
+Atualizado: 06/10/2026, manhã (terça, dia 2 do Hackyard).
+**Onde paramos:** jogo completo e publicado (Demo + Gmail real testado na lojadares). Rodada 2 de auditoria com 2 de 3 relatórios recebidos e a lista de correções abaixo, ainda não aplicada. Gravação marcada para hoje 19:00. Speedrun: entregar até qua 07/10 15:00 (vídeo v0 de reserva existe só no scratchpad da sessão; regerar com `capture.mjs`/`captions.mjs` se preciso).
+**Para retomar:** Josemar diz "retomar construção do game". Ler este arquivo, colar o 3º relatório se houver, conferir os achados e corrigir na ordem de prioridade.
 
 ## Onde estamos
 - **M1 (Modo Demo) pronto e no ar:** https://josemardp.github.io/inbox-raid/
@@ -33,6 +35,36 @@ Atualizado: 05/10/2026, noite (segunda, dia 1 do Hackyard).
   - Hackyard (página lida): entregar de novo substitui a entrega anterior. Campos: repo (obrigatório), vídeo, texto até 500, modelo de IA (obrigatório: Claude Code), recibo opcional.
   - Vídeo v0 (só Demo, 38 s, legendas + cartão final + som sincronizado) montado e conferido; fica de reserva para o Speedrun.
   - Ferramentas de captura e edição ficam fora do repo (scratchpad da sessão): `capture.mjs` (Playwright + Chrome), `captions.mjs` (legendas PNG na fonte do jogo), filtro ffmpeg 9 (`-/filter_complex arquivo`).
+
+## Auditoria rodada 2 (06/10, em andamento): 2 de 3 relatórios recebidos, NADA corrigido ainda
+Prompt da rodada 2 enviado a 3 IAs. Recebidos o relatório 1 (superficial) e o 2 (profundo). Falta o 3.
+Ao retomar: conferir cada achado no código antes de corrigir (relatório de IA também erra).
+
+**Prioridade alta (antes de usar U ou gravar):**
+- [ ] Descadastro one-click usa `no-cors`: o jogo não vê a resposta. Trocar "UNSUBSCRIBED! GONE FOREVER" e o crítico por "pedido de descadastro enviado"; separar `solicitado` de `confirmado` em `UnsubResult` e no contador. Revisar README ("die forever").
+- [ ] Z depois de U volta os e-mails mas não desfaz o descadastro: avisar isso na tela.
+- [ ] Plano B da lixeira com falha parcial: registrar IDs já movidos e não fazer rollback visual integral.
+- [ ] Privacidade: tarjar TODOS os nomes e endereços em modo P (nome de pessoa com domínio de empresa + List-Unsubscribe escapou). P também na tela final (diário de missões). Tarja sem o texto original no DOM.
+- [ ] Tela final: botão e tecla G para reconectar (401 no desfazer), botão DESFAZER clicável no celular, preservar histórico.
+- [ ] `?rec`: `try/catch` e checagem de suporte (sem MediaRecorder o jogo trava em READY?); parar gravador anterior e cancelar timer ao jogar de novo; revogar URL.
+
+**Prioridade média:**
+- [ ] Reler `labels/INBOX` no fim para INBOX ZERO e cartão (e-mail que chega durante a partida).
+- [ ] 403 de permissão nos metadados deve interromper a varredura (hoje vira lista vazia); tolerar só 404 isolado.
+- [ ] Combo: não contar o tempo de espera do Gmail (`busy`).
+- [ ] Recorde: salvar ao entrar na tela final (recarregar a aba perde o recorde).
+- [ ] `parseFrom`: comentário depois do endereço (`Maria <m@x.com> (Sales)`).
+- [ ] One-click só com `List-Unsubscribe=One-Click` exato; preferir URL https mesmo se houver http antes.
+- [ ] `wasStarred` limpo a cada `load()`.
+- [ ] Música para de agendar notas com a aba oculta.
+- [ ] P não reinicia a trava de 350 ms do chefão.
+
+**Baixo:** número gigante no cartão (measureText), download do cartão com `<a>` no DOM, monstros do cartão com semente aleatória, Esc na varredura, GIF mais leve (4,3 MB).
+
+**Para a gravação (dos relatórios):** liberar pop-up e download automático para josemardp.github.io no Chrome; testar `?rec` numa Demo curta antes; P não protege a tela do próprio Gmail nem a de consentimento (enquadrar só a contagem); usar A nos chefões até corrigir U; não prometer zero antes de ver o total; cortar a varredura (~2 min para 500).
+
+**Texto de entrega sugerido (relatório 2, 424 caracteres, ajustar se U mudar):**
+> INBOX RAID turns inbox cleanup into an arcade boss fight. Repeat senders have HP equal to their email count; each hit really archives, trashes, or stars Gmail messages. One-click unsubscribe can land a critical, and the horde rewards fast decisions with combos. Play the no-login demo now; the video shows a real inbox being cleared. Gmail mode is invite-only during Google's review. Built solo with Claude Code for Yard #4.
 
 ## Roteiro da gravação (terça 19:00, caixa josemardp)
 1. Chrome do Josemar em tela cheia, **zoom 150%**. Abrir `https://josemardp.github.io/inbox-raid/?rec`.
