@@ -7,6 +7,7 @@ import { DemoSource } from './demoSource';
 import { GmailSource, preloadGoogle, signIn } from './gmailSource';
 import { burst, centreOf, flash, floatText, initFx, shake, stamp } from './fx';
 import { Raid, splitInbox, type BossMove, type Hit, type HordeMove } from './raid';
+import { renderShareCard, shareCard } from './shareCard';
 import { colorFor, drawMonster, PALETTE } from './sprites';
 import { AuthExpiredError, unsubPlan, type InboxSource, type Mail, type UnsubPlan } from './types';
 
@@ -483,6 +484,7 @@ function showClear() {
     </section>`;
   controls.innerHTML = `
     <div class="row">
+      ${button('C', 'SHARE CARD', 'card', 'crit')}
       ${button('R', 'PLAY AGAIN', 'again', 'primary')}
       ${button('ESC', 'TITLE', 'title', 'ghost')}
     </div>
@@ -599,6 +601,13 @@ function act(action: string) {
       return;
     case 'clear':
       if (action === 'undo') return void undo();
+      if (action === 'card' && raid) {
+        sfx('coin');
+        renderShareCard(raid, source.isDemo)
+          .then(shareCard)
+          .then((how) => toast(how === 'shared' ? 'Shared!' : 'Card saved: inbox-raid.png', 2500))
+          .catch((err) => { console.error(err); toast('Could not make the card'); });
+      }
       if (action === 'again') { saveBest(); startRaid(source.isDemo ? new DemoSource() : source); }
       if (action === 'title') { saveBest(); showTitle(); }
       return;
@@ -648,7 +657,7 @@ const KEYS: Record<string, Record<string, string>> = {
   title: { Enter: 'demo', ' ': 'demo', g: 'gmail', p: 'privacy' },
   boss: { a: 'archive', u: 'unsubscribe', d: 'trash', s: 'spare', ArrowLeft: 'archive', ArrowDown: 'trash', Escape: 'quit', g: 'reauth', p: 'privacy' },
   horde: { ArrowLeft: 'archive', a: 'archive', ArrowDown: 'trash', d: 'trash', ArrowRight: 'star', s: 'star', Escape: 'quit', g: 'reauth', p: 'privacy' },
-  clear: { r: 'again', Enter: 'again', Escape: 'title' },
+  clear: { r: 'again', Enter: 'again', Escape: 'title', c: 'card' },
 };
 
 addEventListener('keydown', (e) => {
