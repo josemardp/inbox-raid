@@ -7,6 +7,7 @@ import { DemoSource } from './demoSource';
 import { GmailSource, preloadGoogle, signIn } from './gmailSource';
 import { burst, centreOf, flash, floatText, initFx, shake, stamp } from './fx';
 import { Raid, splitInbox, type BossMove, type Hit, type HordeMove } from './raid';
+import { recStart, recStopSoon } from './recorder';
 import { renderShareCard, shareCard } from './shareCard';
 import { colorFor, drawMonster, PALETTE } from './sprites';
 import { AuthExpiredError, unsubPlan, type InboxSource, type Mail, type UnsubPlan } from './types';
@@ -182,6 +183,7 @@ function showTitle() {
   busy = false;
   needsAuth = false;
   music.stop();
+  recStopSoon(300);
   hud.hidden = true;
   const parade = PALETTE.map((c, i) => `<canvas class="monster parade" data-key="parade-${i}" data-w="11" data-h="9" data-color="${c}" style="animation-delay:${i * -0.4}s"></canvas>`).join('');
   const best = readBest();
@@ -266,6 +268,7 @@ async function startRaid(src: InboxSource) {
   raid.startedAt = performance.now();
   raid.resetIdle();
   updateHud();
+  recStart();
   stamp('FIGHT!', '#ffd23f');
   sfx('boom');
   next();
@@ -454,6 +457,7 @@ function showClear() {
   view = 'clear';
   music.stop();
   fanfare();
+  recStopSoon();
   hud.hidden = false;
   updateHud();
   const best = readBest();

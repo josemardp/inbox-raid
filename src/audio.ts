@@ -34,16 +34,33 @@ export function unlockAudio() {
   if (ZZFX.audioContext.state !== 'running') ZZFX.audioContext.resume();
 }
 
+/** Every sound goes through here, so a recorder (see recorder.ts) can listen in. */
+function play(p: Params) {
+  const src = zzfx(...p) as AudioBufferSourceNode & { gainNode?: GainNode };
+  if (tap && src.gainNode) src.gainNode.connect(tap);
+}
+
+let tap: AudioNode | null = null;
+
+/** Sends all game audio (effects and music) to an extra node, e.g. a recorder. */
+export function setAudioTap(node: AudioNode | null) {
+  if (tap) master.disconnect(tap);
+  tap = node;
+  if (tap) master.connect(tap);
+}
+
+export const audioContext = ZZFX.audioContext;
+
 export function sfx(name: keyof typeof SFX, pitch = 1) {
   if (muted) return;
   const p = [...SFX[name]];
   if (pitch !== 1 && typeof p[2] === 'number') p[2] = p[2] * pitch;
-  zzfx(...(p as number[]));
+  play(p);
 }
 
 export function comboSfx(combo: number) {
   if (muted) return;
-  zzfx(...[0.8, 0, 440 + combo * 90, , 0.02, 0.1, 1, 1, , , 200, 0.03]);
+  play([0.8, 0, 440 + combo * 90, , 0.02, 0.1, 1, 1, , , 200, 0.03]);
 }
 
 /** Rapid ticks while a boss HP bar drains. */
@@ -56,7 +73,7 @@ export function drainSfx(count: number, ms: number) {
 export function fanfare() {
   if (muted) return;
   [0, 4, 7, 12, 16].forEach((semi, i) =>
-    setTimeout(() => zzfx(0.9, 0, 523 * 2 ** (semi / 12), 0.01, 0.08, 0.25, 1, 1.2), i * 110));
+    setTimeout(() => play([0.9, 0, 523 * 2 ** (semi / 12), 0.01, 0.08, 0.25, 1, 1.2]), i * 110));
 }
 
 // --- Chiptune loop -------------------------------------------------------
