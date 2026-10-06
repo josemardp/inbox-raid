@@ -88,6 +88,8 @@ class Music {
   private nextAt = 0;
   bpm = 132;
 
+  get playing() { return this.timer !== 0; }
+
   start(bpm = this.bpm) {
     this.bpm = bpm;
     if (muted || this.timer) return;
@@ -102,6 +104,8 @@ class Music {
 
   private schedule() {
     const sixteenth = 60 / this.bpm / 4;
+    // After a hidden or frozen tab, skip the missed notes instead of playing them all at once.
+    if (this.nextAt < ctx.currentTime) this.nextAt = ctx.currentTime + 0.05;
     while (this.nextAt < ctx.currentTime + 0.12) {
       const bar = Math.floor(this.step / 16) % 4;
       const s = this.step % 16;

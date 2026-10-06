@@ -1,5 +1,5 @@
 import { buildDemoInbox } from './demoInbox';
-import type { ActionKind, InboxSource, Mail, UnsubResult } from './types';
+import type { ActionKind, InboxSource, Mail, UnsubPlan, UnsubResult } from './types';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -7,9 +7,12 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export class DemoSource implements InboxSource {
   readonly label = 'DEMO INBOX';
   readonly isDemo = true;
+  readonly inboxUrl = '';
+  inboxTotal = 0;
 
   async load(onProgress: (loaded: number, total: number) => void): Promise<Mail[]> {
     const mails = buildDemoInbox();
+    this.inboxTotal = mails.length;
     // Fake a scan so the counter has something to do.
     for (let i = 0; i <= mails.length; i += 23) {
       onProgress(Math.min(i, mails.length), mails.length);
@@ -22,7 +25,7 @@ export class DemoSource implements InboxSource {
   async archive(_ids: string[]) {}
   async trash(_ids: string[]) {}
   async star(_ids: string[]) {}
-  async unsubscribe(_sample: Mail): Promise<UnsubResult> {
+  async unsubscribe(_plan: UnsubPlan): Promise<UnsubResult> {
     return { ok: true, method: 'demo' };
   }
   async undo(_kind: ActionKind, _ids: string[]) {}

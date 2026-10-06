@@ -9,6 +9,24 @@ export interface Mail {
   listUnsubscribe?: string;
   /** True when List-Unsubscribe-Post says one-click is supported (RFC 8058). */
   oneClickUnsub?: boolean;
+  /** Already starred before the raid, so undoing a quest must keep the star. */
+  starred?: boolean;
+}
+
+/** How a sender can be unsubscribed, from its List-Unsubscribe header. */
+export interface UnsubPlan {
+  kind: 'one-click' | 'mailto' | 'link' | 'none';
+  url: string;
+}
+
+export function unsubPlan(m: Mail | undefined): UnsubPlan {
+  const links = [...(m?.listUnsubscribe ?? '').matchAll(/<([^>]+)>/g)].map((x) => x[1].trim());
+  const http = links.find((l) => /^https?:\/\//i.test(l));
+  const mailto = links.find((l) => /^mailto:/i.test(l));
+  if (http && m?.oneClickUnsub) return { kind: 'one-click', url: http };
+  if (mailto) return { kind: 'mailto', url: mailto };
+  if (http) return { kind: 'link', url: http };
+  return { kind: 'none', url: '' };
 }
 
 export type ActionKind = 'archive' | 'trash' | 'star' | 'unsubscribe';
@@ -23,12 +41,22 @@ export interface UnsubResult {
 export interface InboxSource {
   readonly label: string;
   readonly isDemo: boolean;
-  load(onProgress: (loaded: number, total: number) => void): Promise<Mail[]>;
+  /** Real size of the inbox after load(); can be larger than what was scanned. */
+  readonly inboxTotal: number;
+  /** Link that opens this inbox (right account), shown on the final screen. */
+  readonly inboxUrl: string;
+  load(onProgress: (loaded: number, total: number, note?: string) => void): Promise<Mail[]>;
   archive(ids: string[]): Promise<void>;
   trash(ids: string[]): Promise<void>;
   /** Quest: star it and take it out of the inbox, so it waits in Starred. */
   star(ids: string[]): Promise<void>;
-  unsubscribe(sample: Mail): Promise<UnsubResult>;
+  /** Sends the unsubscribe for one-click or mailto plans. Links are opened by the UI, inside the click. */
+  unsubscribe(plan: UnsubPlan): Promise<UnsubResult>;
   /** Puts emails back in the inbox exactly as before the action. */
   undo(kind: ActionKind, ids: string[]): Promise<void>;
+}
+
+/** The Google session ended; the player must reconnect (needs a click). */
+export class AuthExpiredError extends Error {
+  constructor() { super('Google session expired'); }
 }

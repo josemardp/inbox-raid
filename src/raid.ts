@@ -37,10 +37,15 @@ export interface Hit {
 const COMBO_WINDOW_MS = 2500;
 const MAX_COMBO = 8;
 export const MIN_BOSS_EMAILS = 3;
-const MAX_BOSSES = 12;
+const MAX_BOSSES = 20;
+/** A real inbox can hold thousands of one-off emails; one raid takes the newest ones. */
+const MAX_HORDE = 60;
 
-/** Senders with MIN_BOSS_EMAILS+ emails become bosses (biggest first); the rest is the horde. */
-export function splitInbox(mails: Mail[]): { bosses: Boss[]; horde: Mail[] } {
+/**
+ * Senders with MIN_BOSS_EMAILS+ emails become bosses (biggest first); the rest is the horde.
+ * `overflow` counts horde emails left for the next raid.
+ */
+export function splitInbox(mails: Mail[]): { bosses: Boss[]; horde: Mail[]; overflow: number } {
   const groups = new Map<string, Mail[]>();
   for (const m of mails) {
     const key = m.fromEmail.toLowerCase();
@@ -58,7 +63,7 @@ export function splitInbox(mails: Mail[]): { bosses: Boss[]; horde: Mail[] } {
     }
   }
   horde.sort((a, b) => b.date - a.date);
-  return { bosses, horde };
+  return { bosses, horde: horde.slice(0, MAX_HORDE), overflow: Math.max(0, horde.length - MAX_HORDE) };
 }
 
 interface Snapshot {
@@ -93,8 +98,12 @@ export class Raid {
   private idleSince = performance.now();
   private history: Snapshot[] = [];
 
-  constructor(readonly bosses: Boss[], readonly horde: Mail[]) {
-    this.inboxStart = this.inboxLeft = bosses.reduce((s, b) => s + b.mails.length, 0) + horde.length;
+  /**
+   * `outside` = emails still in the inbox that this raid does not fight (not scanned, or
+   * past the horde limit). They count in the inbox total, so INBOX ZERO is never a lie.
+   */
+  constructor(readonly bosses: Boss[], readonly horde: Mail[], readonly outside = 0) {
+    this.inboxStart = this.inboxLeft = bosses.reduce((s, b) => s + b.mails.length, 0) + horde.length + outside;
     this.phase = bosses.length ? 'boss' : horde.length ? 'horde' : 'done';
   }
 
@@ -102,6 +111,12 @@ export class Raid {
   get mail(): Mail | undefined { return this.horde[this.hordeIdx]; }
   get elapsedMs(): number { return (this.endedAt || performance.now()) - this.startedAt; }
   get canUndo(): boolean { return this.history.length > 0; }
+
+  /** The hit that undo() would roll back, so the inbox can be fixed first. */
+  peekUndo(): Hit | null { return this.history.at(-1)?.hit ?? null; }
+
+  /** Hesitation does not count while the tab is hidden. */
+  resetIdle() { this.idleSince = performance.now(); }
 
   hitBoss(move: BossMove): Hit | null {
     const boss = this.boss;
@@ -176,6 +191,7 @@ export class Raid {
   /** Advances the stress meter. Returns true when it just overflowed. */
   tick(dtMs: number): boolean {
     if (this.phase === 'done') return false;
+    dtMs = Math.min(dtMs, 100); // a frozen tab must not dump seconds of stress at once
     const grace = this.phase === 'boss' ? 6000 : 3500;
     const idle = performance.now() - this.idleSince;
     if (idle > grace) this.stress = Math.min(100, this.stress + dtMs * 0.012);

@@ -1,3 +1,6 @@
+// Font bundled with the site (OFL), so no visitor's IP goes to a font CDN.
+import '@fontsource/press-start-2p/latin-400.css';
+import '@fontsource/press-start-2p/latin-ext-400.css';
 import './style.css';
 import { comboSfx, drainSfx, fanfare, isMuted, music, sfx, toggleMute, unlockAudio } from './audio';
 import { DemoSource } from './demoSource';
@@ -5,7 +8,7 @@ import { GmailSource, preloadGoogle, signIn } from './gmailSource';
 import { burst, centreOf, flash, floatText, initFx, shake, stamp } from './fx';
 import { Raid, splitInbox, type BossMove, type Hit, type HordeMove } from './raid';
 import { colorFor, drawMonster, PALETTE } from './sprites';
-import type { InboxSource, Mail } from './types';
+import { AuthExpiredError, unsubPlan, type InboxSource, type Mail, type UnsubPlan } from './types';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector(sel) as T;
 
@@ -16,11 +19,18 @@ initFx($<HTMLCanvasElement>('#fx'), $('#stage'));
 
 let source: InboxSource = new DemoSource();
 let raid: Raid | null = null;
+/** Bumped by every new raid or return to title; late async results from an old run are dropped. */
+let runId = 0;
 let busy = false;
-/** Last key pressed during an animation; it runs as soon as the animation ends. */
-let queued: string | null = null;
+/** Input for a new boss or card is ignored until the player has had time to see it. */
+let armedAt = 0;
+let signingIn = false;
+let needsAuth = false;
 let view: 'title' | 'scan' | 'boss' | 'horde' | 'clear' = 'title';
 let monsterTimer = 0;
+
+const ARM_BOSS_MS = 350;
+const ARM_CARD_MS = 120;
 
 // ---------- helpers ----------
 
@@ -31,16 +41,23 @@ function esc(s: string): string {
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
 
-// Privacy mode: people (senders without an unsubscribe header) are blacked out,
-// so a raid can be recorded or streamed without exposing anyone.
+// Privacy mode, made for recording: every subject and preview is blacked out, and so is
+// the name of anyone who is not a bulk sender (no unsubscribe header).
 let privacy = false;
 try { privacy = localStorage.getItem('inbox-raid-privacy') === '1'; } catch { /* storage blocked */ }
 
 const isPerson = (m: Mail) => !m.listUnsubscribe;
 
-/** Escaped text, blacked out when privacy mode hides it. */
-function shown(text: string, hide: boolean): string {
-  return hide && privacy ? `<span class="redact">${esc(text)}</span>` : esc(text);
+function redact(text: string): string {
+  return `<span class="redact">${esc(text)}</span>`;
+}
+/** A sender name or address: hidden in privacy mode when it is a person. */
+function who(text: string, person: boolean): string {
+  return privacy && person ? redact(text) : esc(text);
+}
+/** A subject or preview: always hidden in privacy mode. */
+function what(text: string): string {
+  return privacy ? redact(text) : esc(text);
 }
 
 function clock(ms: number): string {
@@ -54,12 +71,12 @@ function ago(date: number): string {
 }
 
 let toastTimer = 0;
-function toast(text: string) {
+function toast(text: string, ms = 1800) {
   const t = $('#toast');
   t.textContent = text;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => t.classList.remove('show'), 1600);
+  toastTimer = window.setTimeout(() => t.classList.remove('show'), ms);
 }
 
 function monster(key: string, w: number, h: number, cls = ''): string {
@@ -82,6 +99,19 @@ function animateMonsters() {
 function button(key: string, label: string, action: string, cls = '', disabled = false) {
   return `<button class="btn ${cls}" data-action="${action}" ${disabled ? 'disabled' : ''}><kbd>${key}</kbd><span>${label}</span></button>`;
 }
+
+/** Small buttons under the main ones, so phones can undo, mute and quit too. */
+function utilityRow() {
+  return `
+    <div class="mini-row">
+      ${needsAuth ? '<button class="mini alert" data-action="reauth"><kbd>G</kbd> RECONNECT</button>' : ''}
+      <button class="mini" data-action="undo" ${raid?.canUndo ? '' : 'disabled'}><kbd>Z</kbd> UNDO</button>
+      <button class="mini" data-action="mute"><kbd>M</kbd> ${isMuted() ? 'SOUND OFF' : 'SOUND ON'}</button>
+      <button class="mini" data-action="quit"><kbd>ESC</kbd> QUIT</button>
+    </div>`;
+}
+
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- HUD ----------
 
@@ -106,16 +136,16 @@ function updateHud() {
   if (!raid) return;
   $('#score').textContent = fmt(raid.score);
   const combo = $('#combo');
-  combo.textContent = raid.combo > 1 ? `COMBO x${raid.combo}` : '';
+  combo.textContent = raid.combo > 1 && view !== 'clear' ? `COMBO x${raid.combo}` : '';
   combo.dataset.level = String(Math.min(raid.combo, 8));
 }
 
 let lastTick = performance.now();
 function hudLoop(t: number) {
-  const dt = t - lastTick;
+  const dt = Math.min(t - lastTick, 100);
   lastTick = t;
   if (raid && (view === 'boss' || view === 'horde')) {
-    if (!busy && raid.tick(dt)) overload();
+    if (!busy && !needsAuth && raid.tick(dt)) overload();
     $('#time').textContent = clock(raid.elapsedMs);
     const fill = $('#stress-fill');
     fill.style.width = `${raid.stress}%`;
@@ -124,6 +154,11 @@ function hudLoop(t: number) {
   requestAnimationFrame(hudLoop);
 }
 requestAnimationFrame(hudLoop);
+
+// A hidden tab is not hesitation.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) { raid?.resetIdle(); lastTick = performance.now(); }
+});
 
 function overload() {
   sfx('overload');
@@ -136,13 +171,15 @@ function overload() {
 // ---------- screens ----------
 
 function showTitle() {
+  runId++;
   view = 'title';
   raid = null;
+  busy = false;
+  needsAuth = false;
   music.stop();
   hud.hidden = true;
   const parade = PALETTE.map((c, i) => `<canvas class="monster parade" data-key="parade-${i}" data-w="11" data-h="9" data-color="${c}" style="animation-delay:${i * -0.4}s"></canvas>`).join('');
-  let best = 0;
-  try { best = Number(localStorage.getItem('inbox-raid-best') || 0); } catch { /* storage blocked */ }
+  const best = readBest();
   screen.innerHTML = `
     <section class="title">
       <div class="parade-row">${parade}</div>
@@ -161,13 +198,22 @@ function showTitle() {
       ${button('G', 'RAID MY GMAIL', 'gmail')}
       ${button('P', `PRIVACY ${privacy ? 'ON' : 'OFF'}`, 'privacy', 'ghost')}
     </div>
-    <p class="fine">Demo uses a fake inbox. Gmail mode runs 100% in your browser, no server,<br>and is invite-only while Google reviews the app. Privacy mode blacks out people.</p>`;
+    <p class="fine">Demo uses a fake inbox. Gmail mode runs 100% in your browser, no server,<br>and is invite-only while Google reviews the app. Privacy mode blacks out subjects and people.</p>`;
   animateMonsters();
-  preloadGoogle();
+}
+
+function readBest(): number {
+  try { return Number(localStorage.getItem('inbox-raid-best') || 0); } catch { return 0; }
+}
+
+/** Saved when leaving the final screen, so an undo there cannot keep a score it took back. */
+function saveBest() {
+  if (!raid || raid.phase !== 'done') return;
+  try { if (raid.score > readBest()) localStorage.setItem('inbox-raid-best', String(raid.score)); } catch { /* storage blocked */ }
 }
 
 async function startRaid(src: InboxSource) {
-  source = src;
+  const run = ++runId;
   view = 'scan';
   hud.hidden = true;
   screen.innerHTML = `
@@ -175,80 +221,94 @@ async function startRaid(src: InboxSource) {
       <p class="blink">SCANNING ${esc(src.label)}...</p>
       <p class="scan-count"><span id="scan-n">0</span> emails</p>
       <div class="scan-bar"><i id="scan-fill"></i></div>
+      <p class="scan-note" id="scan-note"></p>
     </section>`;
   controls.innerHTML = '';
   let mails: Mail[];
   try {
-    mails = await src.load((n, total) => {
+    mails = await src.load((n, total, note) => {
+      if (run !== runId) return;
       $('#scan-n').textContent = fmt(n);
       $('#scan-fill').style.width = `${total ? Math.min(100, (n / total) * 100) : 0}%`;
-      sfx('tick', 1 + (n % 50) / 50);
+      const left = Math.ceil((total - n) / 4);
+      $('#scan-note').textContent = note || (!src.isDemo && left > 5 ? `Reading gently to respect Gmail limits, about ${left}s left` : '');
+      if (n % 5 === 0) sfx('tick', 1 + (n % 50) / 50);
     });
   } catch (err) {
+    if (run !== runId) return;
     console.error(err);
-    toast('Could not read the inbox. Try again.');
+    toast(err instanceof AuthExpiredError ? 'Google session expired. Try again.' : 'Could not read the inbox. Try again.', 3000);
     showTitle();
     return;
   }
-  $('#scan-fill').style.width = '100%';
-  const { bosses, horde } = splitInbox(mails);
-  raid = new Raid(bosses, horde);
+  if (run !== runId) return;
+  const { bosses, horde, overflow } = splitInbox(mails);
+  const outside = Math.max(0, src.inboxTotal - mails.length) + overflow;
+  source = src;
+  raid = new Raid(bosses, horde, outside);
   screen.innerHTML = `
     <section class="scan">
-      <p class="scan-count">${fmt(mails.length)} emails</p>
+      <p class="scan-count">${fmt(raid.inboxStart)} emails</p>
       <p class="found"><b>${bosses.length}</b> BOSSES &middot; <b>${horde.length}</b> IN THE HORDE</p>
+      ${outside ? `<p class="found dim">${fmt(outside)} more wait for the next raid</p>` : ''}
       <p class="blink ready">READY?</p>
     </section>`;
   shownInbox = raid.inboxStart;
   $('#inbox-count').textContent = fmt(shownInbox);
-  await new Promise((r) => setTimeout(r, 1400));
+  await wait(1400);
+  if (run !== runId) return;
   hud.hidden = false;
   raid.startedAt = performance.now();
+  raid.resetIdle();
   updateHud();
-  music.start(132);
   stamp('FIGHT!', '#ffd23f');
   sfx('boom');
   next();
 }
 
-/** Routes to whatever the raid needs next, then runs a key the player pressed meanwhile. */
+/** Routes to whatever the raid needs next. */
 function next() {
   if (!raid) return;
+  if (raid.phase === 'done') return showClear();
+  if (!music.playing) music.start(raid.phase === 'boss' ? 132 : 152);
   if (raid.phase === 'boss') showBoss();
-  else if (raid.phase === 'horde') showHorde();
-  else { queued = null; showClear(); return; }
-  const q = queued;
-  queued = null;
-  if (q) act(q);
+  else showHorde();
 }
 
 function showBoss() {
   const r = raid!;
   const boss = r.boss!;
   view = 'boss';
+  armedAt = performance.now() + ARM_BOSS_MS;
   const color = colorFor(boss.key);
   const hp = boss.mails.length;
   const samples = [...new Set(boss.mails.map((m) => m.subject))].slice(0, 3);
-  const canUnsub = boss.mails.some((m) => m.listUnsubscribe);
-  const hide = !canUnsub;
+  const plan = unsubPlan(boss.mails.find((m) => m.listUnsubscribe));
+  const person = plan.kind === 'none';
+  const tag = {
+    'one-click': 'UNSUBSCRIBE AVAILABLE: CRITICAL HIT',
+    mailto: 'UNSUBSCRIBE BY EMAIL: CRITICAL HIT',
+    link: 'UNSUBSCRIBE OPENS THEIR PAGE (archive + you finish it)',
+    none: 'No unsubscribe link from this sender',
+  }[plan.kind];
   screen.innerHTML = `
     <section class="boss" style="--c:${color}">
       <p class="label">BOSS ${r.bossIdx + 1} / ${r.bosses.length}</p>
       <div class="boss-sprite">${monster(boss.key, 11, 9, 'big')}</div>
-      <h2 class="boss-name">${shown(boss.name, hide)}</h2>
-      <p class="boss-email">${shown(boss.email, hide)}</p>
+      <h2 class="boss-name">${who(boss.name, person)}</h2>
+      <p class="boss-email">${who(boss.email, person)}</p>
       <div class="hp"><span>HP</span><div class="hp-bar"><i id="hp-fill"></i></div><b id="hp-n">${fmt(hp)}</b></div>
-      <ul class="attacks">${samples.map((s) => `<li>&gt; ${shown(s, hide)}</li>`).join('')}</ul>
-      ${canUnsub ? '<p class="tag">UNSUBSCRIBE AVAILABLE: CRITICAL HIT</p>' : '<p class="tag dim">No unsubscribe link from this sender</p>'}
+      <ul class="attacks">${samples.map((s) => `<li>&gt; ${what(s)}</li>`).join('')}</ul>
+      <p class="tag ${plan.kind === 'none' ? 'dim' : ''}">${tag}</p>
     </section>`;
   controls.innerHTML = `
     <div class="row">
       ${button('A', 'ARCHIVE ALL', 'archive')}
-      ${button('U', 'UNSUBSCRIBE', 'unsubscribe', 'crit', !canUnsub)}
+      ${button('U', 'UNSUBSCRIBE', 'unsubscribe', 'crit', plan.kind === 'none')}
       ${button('D', 'TRASH ALL', 'trash', 'danger')}
       ${button('S', 'SPARE', 'spare', 'ghost')}
     </div>
-    ${undoHint()}`;
+    ${utilityRow()}`;
   animateMonsters();
   sfx('boss');
 }
@@ -256,8 +316,22 @@ function showBoss() {
 async function bossMove(move: BossMove) {
   const r = raid!;
   const boss = r.boss;
-  if (!boss || busy) return;
-  if (move === 'unsubscribe' && !boss.mails.some((m) => m.listUnsubscribe)) return;
+  if (!boss) return;
+  const src = source;
+  const run = runId;
+  let plan: UnsubPlan | undefined;
+  let linkOnly = false;
+  if (move === 'unsubscribe') {
+    plan = unsubPlan(boss.mails.find((m) => m.listUnsubscribe));
+    if (plan.kind === 'none') return;
+    if (plan.kind === 'link') {
+      // Opened right now, inside the key press, so the browser does not block it.
+      // The player finishes on their page; the game only archives and gives no critical.
+      window.open(plan.url, '_blank', 'noopener');
+      linkOnly = true;
+      move = 'archive';
+    }
+  }
   busy = true;
   const sprite = $('.boss-sprite');
   const [x, y] = centreOf(sprite);
@@ -280,6 +354,7 @@ async function bossMove(move: BossMove) {
     countDown($('#hp-n'), n, drainMs);
     tweenInbox(r.inboxLeft, drainMs);
     await wait(drainMs);
+    if (run !== runId) return;
     sprite.classList.add('dead');
     const crit = move === 'unsubscribe';
     sfx(crit ? 'boom' : move === 'trash' ? 'trash' : 'hit');
@@ -291,14 +366,15 @@ async function bossMove(move: BossMove) {
     stamp(crit ? 'UNSUBSCRIBED!' : move === 'trash' ? 'TRASHED!' : 'ARCHIVED!', crit ? '#ffd23f' : color);
     floatText(x, y - 40, `+${fmt(hit.points)}${hit.combo > 1 ? ` x${hit.combo}` : ''}`, '#ffd23f', 22);
     if (crit) floatText(x, y + 10, 'GONE FOREVER', '#fff', 14);
+    if (linkOnly) toast('Finish the unsubscribe in the tab that just opened', 3000);
     await wait(crit ? 900 : 650);
   }
-  await apply(hit);
+  await apply(hit, src, run, plan);
+  if (run !== runId) return;
   busy = false;
-  if (r.phase === 'horde' && hit.boss && r.bossIdx === r.bosses.length) {
+  if (r.phase === 'horde' && r.bossIdx === r.bosses.length && r.hordeIdx === 0) {
     stamp('HORDE INCOMING!', '#ff2e88');
     music.stop();
-    music.start(152);
   }
   next();
 }
@@ -307,6 +383,7 @@ function showHorde() {
   const r = raid!;
   const mail = r.mail!;
   view = 'horde';
+  armedAt = performance.now() + ARM_CARD_MS;
   const behind = r.horde.slice(r.hordeIdx + 1, r.hordeIdx + 3);
   screen.innerHTML = `
     <section class="horde">
@@ -317,30 +394,32 @@ function showHorde() {
       </div>
     </section>`;
   controls.innerHTML = `
-    <div class="row">
+    <div class="row three">
       ${button('&larr;', 'ARCHIVE', 'archive')}
       ${button('&darr;', 'TRASH', 'trash', 'danger')}
       ${button('&rarr;', 'QUEST &#9733;', 'star', 'crit')}
     </div>
-    ${undoHint()}`;
+    ${utilityRow()}`;
   animateMonsters();
   bindSwipe($('.card.live'));
 }
 
 function card(m: Mail): string {
   const c = colorFor(m.fromEmail);
-  const hide = isPerson(m);
+  const person = isPerson(m);
   return `
     <article class="card live" style="--c:${c}">
-      <header>${monster(m.fromEmail, 11, 9, 'small')}<div><b>${shown(m.fromName, hide)}</b><small>${shown(m.fromEmail, hide)}</small></div><time>${ago(m.date)}</time></header>
-      <h3>${shown(m.subject || '(no subject)', hide)}</h3>
-      ${m.snippet ? `<p>${shown(m.snippet, hide)}</p>` : ''}
+      <header>${monster(m.fromEmail, 11, 9, 'small')}<div><b>${who(m.fromName, person)}</b><small>${who(m.fromEmail, person)}</small></div><time>${ago(m.date)}</time></header>
+      <h3>${what(m.subject || '(no subject)')}</h3>
+      ${m.snippet ? `<p>${what(m.snippet)}</p>` : ''}
     </article>`;
 }
 
 async function hordeMove(move: HordeMove) {
   const r = raid!;
-  if (!r.mail || busy) return;
+  if (!r.mail) return;
+  const src = source;
+  const run = runId;
   busy = true;
   const el = $('.card.live');
   const [x, y] = centreOf(el);
@@ -356,31 +435,29 @@ async function hordeMove(move: HordeMove) {
   floatText(x, y - 30, `+${fmt(hit.points)}${hit.combo > 1 ? ` x${hit.combo}` : ''}`, '#ffd23f', 16 + hit.combo);
   if (hit.combo === 5 || hit.combo === 8) stamp(hit.combo === 8 ? 'MAX COMBO!' : 'COMBO x5!', '#3cff7a');
   await wait(170);
-  await apply(hit);
+  await apply(hit, src, run);
+  if (run !== runId) return;
   busy = false;
   next();
 }
 
-async function showClear() {
+function showClear() {
   const r = raid!;
   view = 'clear';
   music.stop();
   fanfare();
   hud.hidden = false;
   updateHud();
-  let best = 0;
-  try {
-    best = Number(localStorage.getItem('inbox-raid-best') || 0);
-    if (r.score > best) localStorage.setItem('inbox-raid-best', String(r.score));
-  } catch { /* storage blocked */ }
+  const best = readBest();
   const cleared = r.stats.archived + r.stats.trashed + r.stats.starred;
   const zero = r.inboxLeft === 0;
-  $('#combo').textContent = '';
+  const QUESTS_SHOWN = 5;
   screen.innerHTML = `
     <section class="clear">
       <h1 class="logo small"><span>${zero ? 'INBOX ZERO' : 'STAGE CLEAR'}</span></h1>
       ${r.score > best ? '<p class="best blink">NEW HIGH SCORE!</p>' : ''}
       <p class="before-after"><b>${fmt(r.inboxStart)}</b> <span>&rarr;</span> <b>${fmt(r.inboxLeft)}</b></p>
+      ${!zero && r.outside ? `<p class="proof">${fmt(r.outside)} emails were outside this raid. Raid again to keep going.</p>` : ''}
       <dl class="stats">
         <div><dt>EMAILS CLEARED</dt><dd>${fmt(cleared)}</dd></div>
         <div><dt>BOSSES DOWN</dt><dd>${r.stats.bossesDown}/${r.bosses.length}</dd></div>
@@ -391,56 +468,76 @@ async function showClear() {
       </dl>
       ${r.quests.length ? `
         <div class="quests"><p class="label">QUEST LOG &middot; starred, waiting for you in Starred</p>
-        <ul>${r.quests.map((m) => `<li>&#9733; <b>${shown(m.fromName, isPerson(m))}</b> ${shown(m.subject, isPerson(m))}</li>`).join('')}</ul></div>` : ''}
+        <ul>${r.quests.slice(0, QUESTS_SHOWN).map((m) => `<li>&#9733; <b>${who(m.fromName, isPerson(m))}</b> ${what(m.subject)}</li>`).join('')}
+        ${r.quests.length > QUESTS_SHOWN ? `<li class="dim">+${r.quests.length - QUESTS_SHOWN} more in Starred</li>` : ''}</ul></div>` : ''}
       <p class="proof">${source.isDemo
         ? 'Demo mode: nothing real was touched. Imagine this was your inbox.'
-        : 'This was your real inbox. <a href="https://mail.google.com/mail/u/0/#inbox" target="_blank" rel="noopener">Go check it &rarr;</a>'}</p>
+        : `This was your real inbox. <a href="${esc(source.inboxUrl)}" target="_blank" rel="noopener">Go check it &rarr;</a>`}</p>
     </section>`;
   controls.innerHTML = `
     <div class="row">
       ${button('R', 'PLAY AGAIN', 'again', 'primary')}
       ${button('ESC', 'TITLE', 'title', 'ghost')}
-    </div>`;
+    </div>
+    ${r.canUndo ? '<p class="fine"><kbd>Z</kbd> undo the last hit</p>' : ''}`;
   burst(innerWidth / 2, innerHeight / 3, '#ffd23f', 80, 10, 8);
   burst(innerWidth / 2, innerHeight / 3, '#ff2e88', 60, 8, 7);
 }
 
-function undoHint() {
-  return `<p class="fine">${raid?.canUndo ? '<kbd>Z</kbd> undo &middot; ' : ''}<kbd>M</kbd> ${isMuted() ? 'unmute' : 'mute'}</p>`;
-}
-
 // ---------- applying to the inbox ----------
 
-/** Applies a hit to the real source. On failure the game rolls back. */
-async function apply(hit: Hit) {
+/** Applies a hit to the inbox it came from. On failure the game rolls back. */
+async function apply(hit: Hit, src: InboxSource, run: number, plan?: UnsubPlan) {
   try {
-    if (hit.kind === 'archive') await source.archive(hit.ids);
-    else if (hit.kind === 'trash') await source.trash(hit.ids);
-    else if (hit.kind === 'star') await source.star(hit.ids);
-    else if (hit.kind === 'unsubscribe' && hit.boss) {
-      const res = await source.unsubscribe(hit.boss.mails[0]);
-      if (!res.ok) toast('Unsubscribe link opened in a new tab');
-      await source.archive(hit.ids);
+    if (hit.kind === 'archive') await src.archive(hit.ids);
+    else if (hit.kind === 'trash') await src.trash(hit.ids);
+    else if (hit.kind === 'star') await src.star(hit.ids);
+    else if (hit.kind === 'unsubscribe') {
+      // A failed unsubscribe must not cost the archive: the emails still leave the inbox.
+      try {
+        const res = plan ? await src.unsubscribe(plan) : { ok: false };
+        if (!res.ok) toast('Could not unsubscribe automatically. Emails archived.', 3000);
+      } catch (err) {
+        if (err instanceof AuthExpiredError) throw err;
+        console.error(err);
+        toast('Unsubscribe failed. Emails archived anyway.', 3000);
+      }
+      await src.archive(hit.ids);
     }
   } catch (err) {
     console.error(err);
+    if (run !== runId) return;
     raid?.undo();
+    tweenInbox(raid?.inboxLeft ?? 0, 300);
     updateHud();
-    toast('Inbox did not accept that. Rolled back.');
+    if (err instanceof AuthExpiredError) {
+      needsAuth = true;
+      toast('Google session expired. Press G to reconnect.', 4000);
+    } else {
+      toast('Inbox did not accept that. Rolled back.', 3000);
+    }
   }
 }
 
+/** Undo fixes the inbox first; the game only rolls back if the inbox really changed. */
 async function undo() {
-  if (!raid || busy || !raid.canUndo) return;
+  if (!raid || busy) return;
+  const hit = raid.peekUndo();
+  if (!hit) return;
+  const run = runId;
   busy = true;
-  const hit = raid.undo()!;
   try {
     if (hit.kind !== 'spare') await source.undo(hit.kind, hit.ids);
+    if (run !== runId) return;
+    raid.undo();
+    sfx('undo');
+    toast('UNDONE');
   } catch (err) {
     console.error(err);
+    if (err instanceof AuthExpiredError) needsAuth = true;
+    toast(err instanceof AuthExpiredError ? 'Google session expired. Press G to reconnect.' : 'Undo failed in Gmail. Nothing changed.', 3000);
   }
-  sfx('undo');
-  toast('UNDONE');
+  if (run !== runId) return;
   tweenInbox(raid.inboxLeft, 300);
   updateHud();
   busy = false;
@@ -457,72 +554,102 @@ function countDown(el: HTMLElement, from: number, ms: number) {
   requestAnimationFrame(step);
 }
 
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 // ---------- input ----------
+
+const MOVES = new Set(['archive', 'unsubscribe', 'trash', 'spare', 'star']);
 
 function act(action: string) {
   unlockAudio();
-  if (busy && (view === 'boss' || view === 'horde') && action !== 'mute') {
-    queued = action;
+  if (action === 'mute') {
+    const m = toggleMute();
+    toast(m ? 'SOUND OFF' : 'SOUND ON');
+    if (!m && (view === 'boss' || view === 'horde')) music.start();
+    document.querySelectorAll('.mini[data-action="mute"]').forEach((b) => (b.innerHTML = `<kbd>M</kbd> ${m ? 'SOUND OFF' : 'SOUND ON'}`));
     return;
   }
+  // No queue: a key pressed during an animation is dropped, never applied to an email the
+  // player has not seen yet.
+  if (busy) return;
   switch (view) {
     case 'title':
+      if (signingIn) return;
       if (action === 'demo') { sfx('select'); startRaid(new DemoSource()); }
       if (action === 'gmail') raidGmail();
       if (action === 'privacy') {
         privacy = !privacy;
         try { localStorage.setItem('inbox-raid-privacy', privacy ? '1' : '0'); } catch { /* storage blocked */ }
         sfx('select');
-        toast(privacy ? 'PRIVACY ON: people are blacked out' : 'PRIVACY OFF');
+        toast(privacy ? 'PRIVACY ON: subjects and people are blacked out' : 'PRIVACY OFF');
         showTitle();
       }
-      break;
+      return;
     case 'boss':
-      if (['archive', 'unsubscribe', 'trash', 'spare'].includes(action)) bossMove(action as BossMove);
-      break;
     case 'horde':
-      if (['archive', 'trash', 'star'].includes(action)) hordeMove(action as HordeMove);
-      break;
+      if (action === 'quit') { toast('Raid stopped. Everything you hit stays done.'); return showTitle(); }
+      if (action === 'undo') return void undo();
+      if (action === 'reauth') return void reconnect();
+      if (!MOVES.has(action)) return;
+      if (needsAuth) return toast('Google session expired. Press G to reconnect.', 3000);
+      if (performance.now() < armedAt) return;
+      if (view === 'boss') bossMove(action as BossMove);
+      else hordeMove(action as HordeMove);
+      return;
     case 'clear':
-      if (action === 'again') startRaid(source.isDemo ? new DemoSource() : source);
-      if (action === 'title') showTitle();
-      break;
-  }
-  if (action === 'undo') undo();
-  if (action === 'mute') {
-    const m = toggleMute();
-    toast(m ? 'SOUND OFF' : 'SOUND ON');
-    if (!m && (view === 'boss' || view === 'horde')) music.start();
+      if (action === 'undo') return void undo();
+      if (action === 'again') { saveBest(); startRaid(source.isDemo ? new DemoSource() : source); }
+      if (action === 'title') { saveBest(); showTitle(); }
+      return;
   }
 }
 
 /** Google's consent popup needs a user gesture, so this runs straight from the click or key. */
 async function raidGmail() {
+  signingIn = true;
   sfx('select');
-  toast('Opening Google sign-in...');
+  toast('Opening Google sign-in...', 4000);
   try {
     const token = await signIn();
-    startRaid(new GmailSource(token));
+    if (view === 'title') startRaid(new GmailSource(token));
   } catch (err) {
     console.error(err);
-    toast('Sign-in cancelled or blocked');
+    toast(String((err as Error).message).includes('not granted') ? 'Gmail access was not granted' : 'Sign-in cancelled or blocked', 3000);
+  } finally {
+    signingIn = false;
+  }
+}
+
+async function reconnect() {
+  if (!(source instanceof GmailSource) || !needsAuth || signingIn) return;
+  signingIn = true;
+  try {
+    source.setToken(await signIn());
+    needsAuth = false;
+    raid?.resetIdle();
+    toast('Reconnected. Keep raiding!');
+  } catch (err) {
+    console.error(err);
+    toast('Still disconnected. Press G to try again.', 3000);
+  } finally {
+    signingIn = false;
   }
 }
 
 const KEYS: Record<string, Record<string, string>> = {
   title: { Enter: 'demo', ' ': 'demo', g: 'gmail', p: 'privacy' },
-  boss: { a: 'archive', u: 'unsubscribe', d: 'trash', s: 'spare', ArrowLeft: 'archive', ArrowDown: 'trash' },
-  horde: { ArrowLeft: 'archive', a: 'archive', ArrowDown: 'trash', d: 'trash', ArrowRight: 'star', s: 'star' },
+  boss: { a: 'archive', u: 'unsubscribe', d: 'trash', s: 'spare', ArrowLeft: 'archive', ArrowDown: 'trash', Escape: 'quit', g: 'reauth' },
+  horde: { ArrowLeft: 'archive', a: 'archive', ArrowDown: 'trash', d: 'trash', ArrowRight: 'star', s: 'star', Escape: 'quit', g: 'reauth' },
   clear: { r: 'again', Enter: 'again', Escape: 'title' },
 };
 
 addEventListener('keydown', (e) => {
+  // Holding a key must not fire a stream of hits on a real inbox.
+  if (e.repeat) return;
   if (e.metaKey || e.ctrlKey || e.altKey) {
     if (e.key.toLowerCase() === 'z') { e.preventDefault(); act('undo'); }
     return;
   }
+  // Enter or Space on a focused button is that button's click, not the screen shortcut.
+  if ((e.key === 'Enter' || e.key === ' ') && document.activeElement instanceof HTMLButtonElement) return;
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (k === 'z') return act('undo');
   if (k === 'm') return act('mute');
@@ -535,21 +662,29 @@ controls.addEventListener('click', (e) => {
   if (btn && !btn.disabled) act(btn.dataset.action!);
 });
 
+// Google's sign-in script loads only when someone reaches for the Gmail button.
+const warmGoogle = (e: Event) => {
+  if ((e.target as HTMLElement).closest?.('button[data-action="gmail"]')) preloadGoogle();
+};
+controls.addEventListener('pointerover', warmGoogle);
+controls.addEventListener('focusin', warmGoogle);
+
 /** Phone controls: swipe the card left (archive), down (trash) or right (quest). */
 function bindSwipe(el: HTMLElement) {
   let x0 = 0, y0 = 0, active = false;
+  const reset = () => { active = false; el.style.transform = ''; };
   el.addEventListener('pointerdown', (e) => { active = true; x0 = e.clientX; y0 = e.clientY; el.setPointerCapture(e.pointerId); });
   el.addEventListener('pointermove', (e) => {
     if (!active) return;
     el.style.transform = `translate(${e.clientX - x0}px, ${Math.max(0, e.clientY - y0)}px) rotate(${(e.clientX - x0) / 20}deg)`;
   });
+  el.addEventListener('pointercancel', reset);
   el.addEventListener('pointerup', (e) => {
     if (!active) return;
-    active = false;
     const dx = e.clientX - x0, dy = e.clientY - y0;
-    el.style.transform = '';
-    if (Math.abs(dx) > 70 && Math.abs(dx) > dy) act(dx < 0 ? 'archive' : 'star');
-    else if (dy > 70) act('trash');
+    reset();
+    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy)) act(dx < 0 ? 'archive' : 'star');
+    else if (dy > 70 && dy > Math.abs(dx)) act('trash');
   });
 }
 
