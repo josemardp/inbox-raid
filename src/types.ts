@@ -23,7 +23,9 @@ export function unsubPlan(m: Mail | undefined): UnsubPlan {
   const links = [...(m?.listUnsubscribe ?? '').matchAll(/<([^>]+)>/g)].map((x) => x[1].trim());
   const http = links.find((l) => /^https?:\/\//i.test(l));
   const mailto = links.find((l) => /^mailto:/i.test(l));
-  if (http && m?.oneClickUnsub) return { kind: 'one-click', url: http };
+  // A background POST to plain http:// is blocked from an https page (mixed content),
+  // so one-click needs https; an http link can still be opened as a page.
+  if (http && /^https:/i.test(http) && m?.oneClickUnsub) return { kind: 'one-click', url: http };
   if (mailto) return { kind: 'mailto', url: mailto };
   if (http) return { kind: 'link', url: http };
   return { kind: 'none', url: '' };

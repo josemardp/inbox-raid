@@ -46,7 +46,11 @@ const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
 let privacy = false;
 try { privacy = localStorage.getItem('inbox-raid-privacy') === '1'; } catch { /* storage blocked */ }
 
-const isPerson = (m: Mail) => !m.listUnsubscribe;
+// A person is anyone without an unsubscribe header, but also anyone writing from a
+// personal mailbox or through a group or list (those add List-Unsubscribe too).
+const PERSONAL_DOMAINS = /@(gmail|googlemail|hotmail|outlook|live|msn|yahoo|ymail|icloud|me|aol|proton|protonmail|uol|bol|terra|ig|zipmail|gmx)\./i;
+const isPerson = (m: Mail) =>
+  !m.listUnsubscribe || PERSONAL_DOMAINS.test(m.fromEmail) || /\svia\s/i.test(m.fromName) || /@googlegroups\.com$/i.test(m.fromEmail);
 
 function redact(text: string): string {
   return `<span class="redact">${esc(text)}</span>`;
@@ -270,7 +274,10 @@ async function startRaid(src: InboxSource) {
 function next() {
   if (!raid) return;
   if (raid.phase === 'done') return showClear();
-  if (!music.playing) music.start(raid.phase === 'boss' ? 132 : 152);
+  // Bosses at 132 bpm, the horde faster; an undo across phases switches back.
+  const bpm = raid.phase === 'boss' ? 132 : 152;
+  if (music.playing && music.bpm !== bpm) music.stop();
+  if (!music.playing) music.start(bpm);
   if (raid.phase === 'boss') showBoss();
   else showHorde();
 }
@@ -284,7 +291,7 @@ function showBoss() {
   const hp = boss.mails.length;
   const samples = [...new Set(boss.mails.map((m) => m.subject))].slice(0, 3);
   const plan = unsubPlan(boss.mails.find((m) => m.listUnsubscribe));
-  const person = plan.kind === 'none';
+  const person = boss.mails.some(isPerson);
   const tag = {
     'one-click': 'UNSUBSCRIBE AVAILABLE: CRITICAL HIT',
     mailto: 'UNSUBSCRIBE BY EMAIL: CRITICAL HIT',
@@ -347,7 +354,7 @@ async function bossMove(move: BossMove) {
   } else {
     sprite.classList.add('hurt');
     const n = hit.ids.length;
-    const drainMs = Math.min(900, 300 + n * 4);
+    const drainMs = Math.min(700, 250 + n * 3);
     drainSfx(n, drainMs);
     $('#hp-fill').style.transition = `width ${drainMs}ms linear`;
     $('#hp-fill').style.width = '0%';
@@ -367,7 +374,7 @@ async function bossMove(move: BossMove) {
     floatText(x, y - 40, `+${fmt(hit.points)}${hit.combo > 1 ? ` x${hit.combo}` : ''}`, '#ffd23f', 22);
     if (crit) floatText(x, y + 10, 'GONE FOREVER', '#fff', 14);
     if (linkOnly) toast('Finish the unsubscribe in the tab that just opened', 3000);
-    await wait(crit ? 900 : 650);
+    await wait(crit ? 700 : 450);
   }
   await apply(hit, src, run, plan);
   if (run !== runId) return;
@@ -575,17 +582,13 @@ function act(action: string) {
       if (signingIn) return;
       if (action === 'demo') { sfx('select'); startRaid(new DemoSource()); }
       if (action === 'gmail') raidGmail();
-      if (action === 'privacy') {
-        privacy = !privacy;
-        try { localStorage.setItem('inbox-raid-privacy', privacy ? '1' : '0'); } catch { /* storage blocked */ }
-        sfx('select');
-        toast(privacy ? 'PRIVACY ON: subjects and people are blacked out' : 'PRIVACY OFF');
-        showTitle();
-      }
+      if (action === 'privacy') { togglePrivacy(); showTitle(); }
       return;
     case 'boss':
     case 'horde':
       if (action === 'quit') { toast('Raid stopped. Everything you hit stays done.'); return showTitle(); }
+      // Forgot privacy before recording? P works mid-raid and redraws the screen.
+      if (action === 'privacy') { togglePrivacy(); return view === 'boss' ? showBoss() : showHorde(); }
       if (action === 'undo') return void undo();
       if (action === 'reauth') return void reconnect();
       if (!MOVES.has(action)) return;
@@ -600,6 +603,13 @@ function act(action: string) {
       if (action === 'title') { saveBest(); showTitle(); }
       return;
   }
+}
+
+function togglePrivacy() {
+  privacy = !privacy;
+  try { localStorage.setItem('inbox-raid-privacy', privacy ? '1' : '0'); } catch { /* storage blocked */ }
+  sfx('select');
+  toast(privacy ? 'PRIVACY ON: subjects and people are blacked out' : 'PRIVACY OFF');
 }
 
 /** Google's consent popup needs a user gesture, so this runs straight from the click or key. */
@@ -636,8 +646,8 @@ async function reconnect() {
 
 const KEYS: Record<string, Record<string, string>> = {
   title: { Enter: 'demo', ' ': 'demo', g: 'gmail', p: 'privacy' },
-  boss: { a: 'archive', u: 'unsubscribe', d: 'trash', s: 'spare', ArrowLeft: 'archive', ArrowDown: 'trash', Escape: 'quit', g: 'reauth' },
-  horde: { ArrowLeft: 'archive', a: 'archive', ArrowDown: 'trash', d: 'trash', ArrowRight: 'star', s: 'star', Escape: 'quit', g: 'reauth' },
+  boss: { a: 'archive', u: 'unsubscribe', d: 'trash', s: 'spare', ArrowLeft: 'archive', ArrowDown: 'trash', Escape: 'quit', g: 'reauth', p: 'privacy' },
+  horde: { ArrowLeft: 'archive', a: 'archive', ArrowDown: 'trash', d: 'trash', ArrowRight: 'star', s: 'star', Escape: 'quit', g: 'reauth', p: 'privacy' },
   clear: { r: 'again', Enter: 'again', Escape: 'title' },
 };
 

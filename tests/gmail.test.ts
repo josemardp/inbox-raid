@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GmailSource, parseFrom } from '../src/gmailSource';
+import { decodeWords, GmailSource, parseFrom } from '../src/gmailSource';
 import { AuthExpiredError, unsubPlan } from '../src/types';
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
@@ -25,7 +25,20 @@ describe('parseFrom', () => {
   });
 });
 
+describe('decodeWords', () => {
+  it('decodes RFC 2047 base64 and quoted-printable words, leaves plain text alone', () => {
+    expect(decodeWords('=?UTF-8?B?Sm9zw6kgU2lsdmE=?=')).toBe('José Silva');
+    expect(decodeWords('=?UTF-8?Q?Promo=C3=A7=C3=A3o_de_Natal?=')).toBe('Promoção de Natal');
+    expect(decodeWords('=?UTF-8?Q?Ol=C3=A1?= =?UTF-8?Q?_mundo?=')).toBe('Olá mundo');
+    expect(decodeWords('Plain subject = fine?')).toBe('Plain subject = fine?');
+  });
+});
+
 describe('unsubPlan', () => {
+  it('never plans a background POST to plain http (mixed content)', () => {
+    expect(unsubPlan({ listUnsubscribe: '<http://x.com/u>', oneClickUnsub: true } as never).kind).toBe('link');
+  });
+
   it('prefers one-click, then mailto, then a plain link', () => {
     const h = '<mailto:u@x.com?subject=bye>, <https://x.com/u>';
     expect(unsubPlan({ listUnsubscribe: h, oneClickUnsub: true } as never).kind).toBe('one-click');
@@ -116,6 +129,32 @@ describe('GmailSource.load', () => {
   it('turns a 401 into AuthExpiredError', async () => {
     vi.stubGlobal('fetch', fakeGmail({ status401: true }));
     await expect(new GmailSource('t').load(() => {})).rejects.toBeInstanceOf(AuthExpiredError);
+  });
+});
+
+describe('GmailSource.trash', () => {
+  it('falls back to per-message trash and untrash if Gmail refuses TRASH in batchModify', async () => {
+    const hits: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      hits.push(url.replace(/^.*\/users\/me/, ''));
+      if (url.endsWith('/batchModify') && String(init?.body).includes('TRASH')) return json({ error: 'Invalid label' }, 400);
+      return new Response(null, { status: 204 });
+    }));
+    const g = new GmailSource('t');
+    await g.trash(['x', 'y']);
+    expect(hits).toContain('/messages/x/trash');
+    expect(hits).toContain('/messages/y/trash');
+    hits.length = 0;
+    await g.undo('trash', ['x']);
+    expect(hits).toContain('/messages/x/untrash');
+  });
+
+  it('uses one batchModify when Gmail accepts TRASH (the documented path)', async () => {
+    const hits: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => { hits.push(url); return new Response(null, { status: 204 }); }));
+    await new GmailSource('t').trash(['x', 'y']);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatch(/batchModify$/);
   });
 });
 

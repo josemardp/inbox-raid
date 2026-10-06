@@ -77,6 +77,7 @@ interface Snapshot {
   stats: Stats;
   quests: number;
   bossStatus: BossStatus | null;
+  lastActionAt: number;
   hit: Hit;
 }
 
@@ -182,6 +183,7 @@ export class Raid {
     this.stress = s.stress;
     this.stats = s.stats;
     this.quests.length = s.quests;
+    this.lastActionAt = s.lastActionAt;
     if (s.hit.boss && s.bossStatus) s.hit.boss.status = s.bossStatus;
     this.endedAt = 0;
     this.idleSince = performance.now();
@@ -225,7 +227,7 @@ export class Raid {
     return {
       phase: this.phase, bossIdx: this.bossIdx, hordeIdx: this.hordeIdx, inboxLeft: this.inboxLeft,
       score: this.score, combo: this.combo, stress: this.stress, stats: { ...this.stats },
-      quests: this.quests.length, bossStatus,
+      quests: this.quests.length, bossStatus, lastActionAt: this.lastActionAt,
     };
   }
 }

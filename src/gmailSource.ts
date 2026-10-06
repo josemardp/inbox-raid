@@ -183,14 +183,14 @@ export class GmailSource implements InboxSource {
       const m = await this.call<{ id: string; labelIds?: string[]; snippet: string; internalDate: string; payload: { headers: { name: string; value: string }[] } }>(
         `/messages/${id}?format=metadata&${meta}&${fields}`);
       const h = m.payload.headers;
-      const [fromName, fromEmail] = parseFrom(header(h, 'From'));
+      const [fromName, fromEmail] = parseFrom(decodeWords(header(h, 'From')));
       const starred = !!m.labelIds?.includes('STARRED');
       if (starred) this.wasStarred.add(m.id);
       mails.push({
         id: m.id,
         fromName,
         fromEmail: fromEmail.toLowerCase(),
-        subject: header(h, 'Subject'),
+        subject: decodeWords(header(h, 'Subject')),
         snippet: decodeEntities(m.snippet),
         date: Number(m.internalDate),
         listUnsubscribe: header(h, 'List-Unsubscribe') || undefined,
@@ -215,11 +215,39 @@ export class GmailSource implements InboxSource {
   }
 
   archive(ids: string[]) { return this.modify(ids, [], ['INBOX']); }
-  trash(ids: string[]) { return this.modify(ids, ['TRASH'], ['INBOX']); }
   star(ids: string[]) { return this.modify(ids, ['STARRED'], ['INBOX']); }
 
+  // Google's docs say TRASH can be applied with batchModify. If Gmail ever refuses it
+  // (400), fall back to the dedicated per-message trash and untrash endpoints.
+  async trash(ids: string[]) {
+    try {
+      await this.modify(ids, ['TRASH'], ['INBOX']);
+    } catch (err) {
+      if (!/Gmail 400/.test(String(err))) throw err;
+      await this.perMessage(ids, 'trash');
+    }
+  }
+
+  private async untrash(ids: string[]) {
+    try {
+      await this.modify(ids, ['INBOX'], ['TRASH']);
+    } catch (err) {
+      if (!/Gmail 400/.test(String(err))) throw err;
+      await this.perMessage(ids, 'untrash');
+      await this.modify(ids, ['INBOX'], []);
+    }
+  }
+
+  private async perMessage(ids: string[], op: 'trash' | 'untrash') {
+    const failed = await pool(ids, WORKERS, async (id) => {
+      await this.paced();
+      await this.call(`/messages/${id}/${op}`, { method: 'POST' });
+    });
+    if (failed) throw new Error(`Gmail refused ${op} for ${failed} emails`);
+  }
+
   async undo(kind: ActionKind, ids: string[]) {
-    if (kind === 'trash') return this.modify(ids, ['INBOX'], ['TRASH']);
+    if (kind === 'trash') return this.untrash(ids);
     if (kind === 'star') {
       // Keep stars that were there before the raid.
       const fresh = ids.filter((id) => !this.wasStarred.has(id));
@@ -274,6 +302,26 @@ function base64(s: string): string {
 
 function base64url(s: string): string {
   return base64(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * RFC 2047 encoded-words (=?UTF-8?B?...?= or =?ISO-8859-1?Q?...?=), in case a header
+ * arrives undecoded. Text without encoded-words is returned untouched.
+ */
+export function decodeWords(s: string): string {
+  if (!s.includes('=?')) return s;
+  return s
+    .replace(/(\?=)\s+(=\?)/g, '$1$2') // whitespace between encoded-words is not content
+    .replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (whole, charset: string, enc: string, text: string) => {
+      try {
+        const bytes = enc.toUpperCase() === 'B'
+          ? Uint8Array.from(atob(text), (c) => c.charCodeAt(0))
+          : Uint8Array.from(text.replace(/_/g, ' ').replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16))), (c) => c.charCodeAt(0));
+        return new TextDecoder(charset.toLowerCase()).decode(bytes);
+      } catch {
+        return whole;
+      }
+    });
 }
 
 function decodeEntities(s: string): string {

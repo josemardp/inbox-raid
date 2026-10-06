@@ -78,6 +78,7 @@ function note(freq: number, start: number, dur: number, type: OscillatorType, vo
   g.gain.setValueAtTime(vol, start);
   g.gain.exponentialRampToValueAtTime(0.001, start + dur);
   o.connect(g).connect(master);
+  o.onended = () => { o.disconnect(); g.disconnect(); };
   o.start(start);
   o.stop(start + dur + 0.02);
 }
