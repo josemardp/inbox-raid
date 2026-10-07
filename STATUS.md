@@ -1,8 +1,8 @@
 # STATUS: INBOX RAID
 
 Atualizado: 06/10/2026, noite (terça, dia 2 do Hackyard).
-**Onde paramos:** jogo completo e publicado. Correções da rodada 2 de auditoria aplicadas e testadas na Demo (06/10 noite); falta conferir no Gmail real e gravar. Não há registro da gravação marcada para 19:00 de 06/10. Speedrun: entregar até qua 07/10 15:00 (vídeo v0 de reserva existe só no scratchpad da sessão; regerar com `capture.mjs`/`captions.mjs` se preciso).
-**Para retomar:** Josemar diz "retomar construção do game". Ler este arquivo; próximo passo é o teste real na lojadares e a gravação.
+**Onde paramos:** jogo completo e publicado. Correções da rodada 2 de auditoria aplicadas, publicadas e testadas na Demo e no Gmail real da lojadares (06/10 noite). Próximo: gravar na quarta 07/10. Não há registro da gravação marcada para 19:00 de 06/10. Speedrun: entregar até qua 07/10 15:00 (vídeo v0 de reserva existe só no scratchpad da sessão; regerar com `capture.mjs`/`captions.mjs` se preciso).
+**Para retomar:** Josemar diz "retomar construção do game". Ler este arquivo; próximo passo é a gravação (quarta 07/10).
 
 ## Onde estamos
 - **M1 (Modo Demo) pronto e no ar:** https://josemardp.github.io/inbox-raid/
@@ -51,7 +51,11 @@ Cada achado foi conferido no código antes de corrigir. `npm test`: 31 testes pa
 - Varredura: Esc e botão CANCEL (para a leitura no Gmail também); 403 interrompe em vez de virar caixa vazia (só 404 é tolerado); `wasStarred` limpo a cada varredura.
 - Também: RECONNECT some depois de reconectar, Enter funciona com o login do Google pendurado, cartão (cancelar no celular não baixa, C repetido não duplica, números centralizados, `<a>` no DOM), música não agenda com a aba oculta, `parseFrom` com comentário, `npm test` no deploy.
 
-**Ainda NÃO testado no Gmail real:** nada do bloco acima rodou contra Gmail de verdade (só Demo e Gmail simulado nos testes). Antes da gravação: partida curta na lojadares (arquivar, lixeira, U, Z).
+**06/10 21:30: testado no Gmail real (lojadares, site publicado `dd8b789`)**, pelo `nav-lojadares`:
+- Conversa do Inter (4 e-mails, já arquivada) devolvida à caixa só para virar chefão. Chefão: A arquivou (HUD 5 para 1), Z devolveu à caixa (conferido no Gmail), A de novo.
+- Horda: alerta do Google para a lixeira (conferido na Lixeira); tela final INBOX ZERO e a recontagem real do Gmail concordou com o zero; Z na tela final devolveu o alerta à caixa, não lido, e o jogo voltou à horda. Esc saiu.
+- Estado final igual ao inicial: caixa só com o alerta (não lido), Inter arquivado. Obs.: a lista da caixa no Gmail web pode vir desatualizada logo após as ações; conferir com a pesquisa `in:inbox`.
+- **U não testado no real:** a lojadares não tem remetente descartável com 3+ e-mails e link de descadastro (Inter não tem). Testar U só em remetente que o Josemar escolher.
 
 **Ficou para depois (baixo):** número gigante no cartão, monstros do cartão com semente aleatória, GIF mais leve (4,3 MB), sugestões de vídeo (GIF do modo real, tela dividida, contador do Gmail no canto).
 - Texto de entrega alternativo (471 caracteres) do relatório 3: no scratchpad da sessão 00e21256 (`relatorio-auditoria-inbox-raid.md`, só no notebook laptop-3nsqg27t).
@@ -71,8 +75,7 @@ Cada achado foi conferido no código antes de corrigir. `npm test`: 31 testes pa
 7. O áudio do jogo baixa sozinho (`inbox-raid-audio.webm`); a edição junta pelo FIGHT!.
 
 ## Próximo passo
-1. **Publicar as correções** (push) e fazer partida curta real na lojadares: arquivar, lixeira, U, Z, tela final.
-2. **Gravação** na caixa **josemardp** com privacidade ligada (decisão do Josemar). Ele joga no Chrome dele, Claude grava a tela com ffmpeg. Até lá, não limpar a caixa da josemardp.
+1. **Gravação: quarta 07/10 (decisão do Josemar), antes do Speedrun das 15:00**, na caixa **josemardp** com privacidade ligada (decisão do Josemar). Ele joga no Chrome dele, Claude grava a tela com ffmpeg. Até lá, não limpar a caixa da josemardp.
 3. Speedrun até qua 07/10 15:00: README com GIF + vídeo v1 + entrega no Hackyard.
    - Varredura: `messages.list` em `in:inbox` + metadados (From, Subject, Date, List-Unsubscribe, List-Unsubscribe-Post).
    - Ações em lote com `messages.batchModify` (arquivar = tirar INBOX; lixeira = TRASH; missão = STARRED e tirar INBOX).
