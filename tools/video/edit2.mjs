@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require(path.join(execSync('npm root -g').toString().trim(), 'playwright'));
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const fontUrl = (p) => pathToFileURL(path.join(ROOT, 'node_modules/@fontsource', p)).href;
-const [demoDir, realDir, OUTF] = process.argv.slice(2).map((p) => path.resolve(p));
+const [demoDir, realDir, OUTF, BED_FILE] = process.argv.slice(2).map((p) => path.resolve(p));
 const work = path.join(path.dirname(OUTF), 'edit2');
 fs.rmSync(work, { recursive: true, force: true });
 fs.mkdirSync(work, { recursive: true });
@@ -106,10 +106,9 @@ const run = (args) => execFileSync('ffmpeg', ['-y', '-v', 'error', ...args], { s
 const segs = [];
 // Every edge gets a tiny audio fade, so cuts never click.
 const EDGE = 0.06;
-// The real boss fight has a long stretch of steady music: every bed comes from there.
+// Quiet stretches get the game's music alone (tools/video/music-bed.mjs), never effects.
 let bed = 0;
-const BED0 = 18;
-const bedInput = (dur) => { const a = ['-ss', (BED0 + bed).toFixed(3), '-t', dur.toFixed(3), '-i', R.audio]; bed += dur; return a; };
+const bedInput = (dur) => { const a = ['-ss', bed.toFixed(3), '-t', dur.toFixed(3), '-i', BED_FILE]; bed += dur; return a; };
 
 function clip(name, T, from, to, { speed = 1, overlays = [], fadeIn = 0, fadeOut = 0 } = {}) {
   const dur = to - from;
@@ -131,10 +130,10 @@ function clip(name, T, from, to, { speed = 1, overlays = [], fadeIn = 0, fadeOut
   if (fadeIn || fadeOut) { v += `;[${vl}]${[fadeIn && `fade=in:d=${fadeIn}`, fadeOut && `fade=out:st=${(out - fadeOut).toFixed(2)}:d=${fadeOut}`].filter(Boolean).join(',')}[vf]`; vl = 'vf'; }
   const delay = aFrom < 0 && !pre ? `adelay=${Math.round(-aFrom * 1000)}:all=1,` : '';
   const tempo = pre || speed === 1 ? '' : speed <= 2 ? `atempo=${speed},` : `atempo=2,atempo=${Math.min(2, speed / 2).toFixed(4)},`;
-  const vol = pre ? 'volume=0.6,' : speed > 2 ? 'volume=0.5,' : '';
+  const vol = pre ? 'volume=1.1,' : speed > 2 ? 'volume=0.5,' : '';
   const fades = `afade=in:d=${Math.max(EDGE, fadeIn)},afade=out:st=${(out - Math.max(EDGE, fadeOut)).toFixed(3)}:d=${Math.max(EDGE, fadeOut)}`;
   const a = lead
-    ? `[${overlays.length + 2}:a]volume=0.6,apad,atrim=0:${lead.toFixed(3)},afade=out:st=${Math.max(0, lead - 0.15).toFixed(3)}:d=0.15[bd];[1:a]${tempo}afade=in:d=0.05[ga];[bd][ga]concat=n=2:v=0:a=1,apad,atrim=0:${out.toFixed(3)},${fades}[a]`
+    ? `[${overlays.length + 2}:a]volume=1.1,apad,atrim=0:${lead.toFixed(3)},afade=out:st=${Math.max(0, lead - 0.15).toFixed(3)}:d=0.15[bd];[1:a]${tempo}afade=in:d=0.05[ga];[bd][ga]concat=n=2:v=0:a=1,apad,atrim=0:${out.toFixed(3)},${fades}[a]`
     : `[1:a]${delay}${tempo}${vol}apad,atrim=0:${out.toFixed(3)},${fades}[a]`;
   const file = path.join(work, `${name}.mp4`);
   run([...inputs, '-filter_complex', `${v};${a}`, '-map', `[${vl}]`, '-map', '[a]', '-t', out.toFixed(3), ...ENC, file]);
@@ -142,7 +141,7 @@ function clip(name, T, from, to, { speed = 1, overlays = [], fadeIn = 0, fadeOut
   console.log(name, out.toFixed(2), 's');
 }
 
-function still(name, image, dur, { blur = [], overlays = [], fadeIn = 0.35, fadeOut = 0.35, vol = 0.6 } = {}) {
+function still(name, image, dur, { blur = [], overlays = [], fadeIn = 0.35, fadeOut = 0.35, vol = 1.0 } = {}) {
   const inputs = ['-loop', '1', '-t', String(dur), '-i', image, ...bedInput(dur)];
   overlays.forEach((o) => inputs.push('-i', o.file));
   let v = '[0:v]scale=1920:1080,setsar=1,format=yuv420p[s0]';
@@ -250,7 +249,7 @@ still('b8-drafts', path.join(realDir, 'gmail-after-drafts.png'), 3.2, {
   blur: [[840, 255, 1000, 60], [560, 320, 1300, 220], [1830, 20, 80, 60]],
   overlays: [{ file: C.drafts, from: 0.2, to: 3.2 }],
 });
-still('b9-end', endCard, 5.5, { fadeIn: 0.6, fadeOut: 0.8, vol: 0.3 });
+still('b9-end', endCard, 5.5, { fadeIn: 0.6, fadeOut: 0.8, vol: 0.8 });
 
 fs.writeFileSync(path.join(work, 'list.txt'), segs.map((s) => `file '${s.replace(/\\/g, '/')}'`).join('\n'));
 const joined = path.join(work, 'joined.mp4');
