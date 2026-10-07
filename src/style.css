@@ -42,6 +42,8 @@ button { font: inherit; color: inherit; }
   margin: 0 auto;
   padding: 16px;
   gap: 16px;
+  /* A card flying off the bottom must not grow the page and flash a scrollbar. */
+  overflow-y: clip;
 }
 
 #screen { flex: 1; display: flex; flex-direction: column; justify-content: center; }
