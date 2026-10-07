@@ -1,0 +1,17 @@
+{
+  "boss": {
+    "deals@megamart.example": "unsubscribe",
+    "notifications@linkedout.example": "trash"
+  },
+  "horde": {
+    "invoice@totally-legit.example": "trash",
+    "calendar@work.example": "star",
+    "tom@street.example": "archive",
+    "billing@powerco.example": "archive",
+    "hello@hackyard.example": "archive",
+    "tickets@city.example": "trash",
+    "welcome@unknown.example": "archive"
+  },
+  "defaultBoss": "archive",
+  "defaultHorde": "archive"
+}

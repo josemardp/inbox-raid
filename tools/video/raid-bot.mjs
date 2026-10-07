@@ -87,13 +87,16 @@ const startCast = () => cdp.send('Page.startScreencast', { format: 'jpeg', quali
 
 // ---------- game state ----------
 const state = () => page.evaluate(() => {
-  const view = document.querySelector('.brief.boss') ? 'boss' : document.querySelector('.card.live') ? 'horde' : document.querySelector('.report') ? 'clear' : document.querySelector('.brief.scan') ? 'scan' : document.querySelector('.brief.title') ? 'title' : 'none';
+  const view = document.querySelector('.overlay .mission') ? 'brief' : document.querySelector('.brief.boss') ? 'boss' : (document.querySelector('.card.live') || document.querySelector('.zones')) ? 'horde' : document.querySelector('.report') ? 'clear' : document.querySelector('.brief.scan') ? 'scan' : document.querySelector('.brief.title') ? 'title' : 'none';
   const label = document.querySelector('.orbit-tag')?.textContent || '';
-  const sprite = document.querySelector('.boss-sprite canvas.monster, .card-sprite canvas.monster');
+  const sprite = document.querySelector('.boss-sprite canvas.monster, .card-sprite canvas.monster, .mini-card.sel canvas.monster');
+  const briefReady = !!document.querySelector('.overlay .mission') && !document.querySelector('.overlay .fulltext.loading') && !!document.querySelector('.overlay [data-brief]');
+  const canDraft = !!document.querySelector('.overlay [data-brief="draft"]:not(:disabled)');
+  const briefKey = document.querySelector('.overlay .mission .email')?.textContent || '';
   const tag = document.querySelector('.brief.boss .critical')?.textContent || '';
   const unsubOk = !document.querySelector('button[data-action="unsubscribe"]')?.disabled;
   const privacyOn = /PRIVACY ON/.test(document.querySelector('#controls')?.textContent || '');
-  return { view, label, key: sprite?.dataset.key || '', tag, unsubOk, privacyOn, stamps: window.__stamps.splice(0) };
+  return { view, label, key: sprite?.dataset.key || '', tag, unsubOk, privacyOn, briefReady, canDraft, briefKey, stamps: window.__stamps.splice(0) };
 });
 
 const KEY = { archive: 'a', trash: 'd', unsubscribe: 'u', spare: 's' };
@@ -103,7 +106,7 @@ let demoUnsubs = 0;
 function bossMove(s, idx) {
   const planned = PLAN.boss[s.key];
   if (planned) return planned === 'unsubscribe' && !s.unsubOk ? 'archive' : planned;
-  if (MODE === 'gmail') return PLAN.defaultBoss || 'archive';
+  if (MODE === 'gmail' || PLAN.defaultBoss) return PLAN.defaultBoss || 'archive';
   if (/critical/i.test(s.tag) && s.unsubOk && demoUnsubs < 3) { demoUnsubs++; return 'unsubscribe'; }
   return idx % 3 === 1 ? 'trash' : 'archive';
 }
@@ -112,7 +115,7 @@ function hordeMove(s) {
   const n = hordeSeen[s.key] = (hordeSeen[s.key] || 0) + 1;
   const planned = PLAN.horde[`${s.key}#${n}`] || PLAN.horde[s.key];
   if (planned) return planned;
-  if (MODE === 'gmail') return PLAN.defaultHorde || 'star';
+  if (MODE === 'gmail' || PLAN.defaultHorde) return PLAN.defaultHorde || 'star';
   const r = Math.random();
   return r < 0.6 ? 'archive' : r < 0.85 ? 'trash' : 'star';
 }
@@ -127,12 +130,35 @@ async function press(key, what) {
 // obvious ones, and once in a while hits the wrong key and undoes it.
 let streak = 0;
 let hordeN = 0;
-let mistakeDone = false;
+let mistakeDone = !flag('oops') && MODE !== 'gmail';
+let draftsDone = 0;
+const MAX_DRAFTS = Number(arg('drafts', '1'));
+
+/** The briefing: read the email, try the reply tones, save one draft (or just star it). */
+async function handleBrief() {
+  for (let i = 0; i < 200 && !(await state()).briefReady; i++) await sleep(50);
+  const b = await state();
+  ev('brief-open', { canDraft: b.canDraft });
+  await sleep(rand(2400, 3300));
+  if (b.canDraft && draftsDone < MAX_DRAFTS) {
+    await press('2', 'tone later'); await sleep(rand(900, 1200));
+    await press('1', 'tone yes'); await sleep(rand(1300, 1700));
+    draftsDone++;
+    await press('s', 'save draft');
+    ev('draft-saved');
+  } else {
+    await press(HKEY.star, 'brief star');
+  }
+  for (let i = 0; i < 200 && (await state()).view === 'brief'; i++) await sleep(50);
+  ev('brief-closed');
+}
 function think(s) {
   if (s.view === 'boss') {
     const r = Math.random();
     return r < 0.2 ? rand(1500, 2200) : r < 0.85 ? rand(2300, 3900) : rand(4100, 5200);
   }
+  // The short demo keeps its combo alive from the last boss to the last card.
+  if (MODE === 'demo') return rand(800, 1600);
   if (streak > 0) { streak--; return rand(650, 1000); }
   const r = Math.random();
   if (r < 0.15) { streak = 2 + Math.floor(rand(0, 3)); return rand(800, 1100); }
@@ -175,7 +201,9 @@ async function handleSignIn(popup) {
 async function gmailShots(tag) {
   if (MODE !== 'gmail') return;
   const g = await ctx.newPage();
-  for (const [name, url] of [['search', 'https://mail.google.com/mail/u/0/#search/in%3Ainbox'], ['inbox', 'https://mail.google.com/mail/u/0/#inbox']]) {
+  const shots = [['search', 'https://mail.google.com/mail/u/0/#search/in%3Ainbox'], ['inbox', 'https://mail.google.com/mail/u/0/#inbox']];
+  if (tag === 'after') shots.push(['drafts', 'https://mail.google.com/mail/u/0/#drafts']);
+  for (const [name, url] of shots) {
     await g.goto(url);
     await g.mouse.move(1000, 700);
     await sleep(7000);
@@ -192,6 +220,9 @@ await gmailShots('before');
 await page.addInitScript(() => {
   if (!sessionStorage.getItem('bot-init')) { sessionStorage.setItem('bot-init', '1'); localStorage.setItem('inbox-raid-privacy', '0'); }
   localStorage.setItem('inbox-raid-lang', 'en');
+  // The triage board, without the first-run coach notes.
+  localStorage.setItem('inbox-raid-style', 'board');
+  localStorage.setItem('inbox-raid-tutorial-v1', '1');
 });
 await page.goto(URL_);
 await page.waitForSelector('.brief.title');
@@ -227,6 +258,7 @@ while (Date.now() - t0 < 15 * 60_000) {
   for (const st of s.stamps) events.push({ t: st.t, type: 'stamp', text: st.text });
   if (s.view === 'clear') { clearAt = Date.now(); ev('clear'); break; }
   if (s.view === 'title' && events.some((e) => e.type === 'fight-screen')) { ev('back-to-title'); break; }
+  if (s.view === 'brief') { await handleBrief(); pressedAt = Date.now(); await sleep(40); continue; }
   if (s.view === 'boss' || s.view === 'horde') {
     if (s.label !== lastLabel) {
       if (!lastLabel) ev('fight-screen');
