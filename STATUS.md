@@ -18,7 +18,8 @@ Atualizado: 07/10/2026, ~13:25 (quarta, dia 3 do Hackyard).
 - Correções de hoje: carimbo "MAX COMBO" só uma vez, barra de rolagem que piscava com o tremor da tela, título cabendo em 720 de altura, celular baixo com os botões sempre visíveis.
 
 ## Vídeo (pronto)
-- **Arquivo:** `C:\Users\pc\Downloads\inbox-raid-demo-video.mp4` (1:46, 1920x1080, 30 fps, som do jogo). Só nesta máquina (notebook atual); não vai para o git (21 MB).
+- **No YouTube (público):** https://youtu.be/3pmce3kaHck
+- **Arquivo:** `C:\Users\pc\Downloads\inbox-raid-demo-video.mp4` (1:50, 1920x1080, 30 fps, som do jogo já sem chiado e no volume do YouTube). Só nesta máquina (notebook atual); não vai para o git (21 MB).
 - **Conteúdo, em inglês:**
   1. Gmail real com 194 e-mails (assuntos desfocados).
   2. Título e privacidade ligada.
@@ -47,7 +48,7 @@ Atualizado: 07/10/2026, ~13:25 (quarta, dia 3 do Hackyard).
 
 ## Próximo passo
 1. Até sexta 09/10 15:00 (meta 12:00): entrega final. A atual já vale; reenviar só se houver melhoria (ideias: legenda "194 real emails" em vez de "in my inbox", GIF do modo real no README).
-2. Pendente sem pressa: os scripts de restaurar/limpar a caixa e o plano da partida estão só em  desta máquina.
+2. Pendente sem pressa: os scripts de restaurar/limpar a caixa e o plano da partida estão só em `.playwright-mcp/` desta máquina.
 
 ## Decisões e dados fixos
 - Plano completo: [docs/PLANO.md](docs/PLANO.md).
