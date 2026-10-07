@@ -74,11 +74,10 @@ const startCast = () => cdp.send('Page.startScreencast', { format: 'jpeg', quali
 
 // ---------- game state ----------
 const state = () => page.evaluate(() => {
-  const s = document.querySelector('#screen section');
-  const view = s ? s.className.split(' ')[0] : 'none';
-  const label = document.querySelector('#screen .label')?.textContent || '';
-  const sprite = document.querySelector('.boss-sprite canvas.monster, .card.live canvas.monster');
-  const tag = document.querySelector('.boss .tag')?.textContent || '';
+  const view = document.querySelector('.brief.boss') ? 'boss' : document.querySelector('.card.live') ? 'horde' : document.querySelector('.report') ? 'clear' : document.querySelector('.brief.scan') ? 'scan' : document.querySelector('.brief.title') ? 'title' : 'none';
+  const label = document.querySelector('.orbit-tag')?.textContent || '';
+  const sprite = document.querySelector('.boss-sprite canvas.monster, .card-sprite canvas.monster');
+  const tag = document.querySelector('.brief.boss .critical')?.textContent || '';
   const unsubOk = !document.querySelector('button[data-action="unsubscribe"]')?.disabled;
   const privacyOn = /PRIVACY ON/.test(document.querySelector('#controls')?.textContent || '');
   return { view, label, key: sprite?.dataset.key || '', tag, unsubOk, privacyOn, stamps: window.__stamps.splice(0) };
@@ -92,7 +91,7 @@ function bossMove(s, idx) {
   const planned = PLAN.boss[s.key];
   if (planned) return planned === 'unsubscribe' && !s.unsubOk ? 'archive' : planned;
   if (MODE === 'gmail') return PLAN.defaultBoss || 'archive';
-  if (/CRITICAL/.test(s.tag) && s.unsubOk && demoUnsubs < 3) { demoUnsubs++; return 'unsubscribe'; }
+  if (/critical/i.test(s.tag) && s.unsubOk && demoUnsubs < 3) { demoUnsubs++; return 'unsubscribe'; }
   return idx % 3 === 1 ? 'trash' : 'archive';
 }
 const hordeSeen = {};
@@ -179,9 +178,10 @@ await gmailShots('before');
 // Start with privacy off, so the video shows P turning it on.
 await page.addInitScript(() => {
   if (!sessionStorage.getItem('bot-init')) { sessionStorage.setItem('bot-init', '1'); localStorage.setItem('inbox-raid-privacy', '0'); }
+  localStorage.setItem('inbox-raid-lang', 'en');
 });
 await page.goto(URL_);
-await page.waitForSelector('#screen .title');
+await page.waitForSelector('.brief.title');
 await page.evaluate(() => document.fonts.ready);
 await startCast();
 ev('cast-start');

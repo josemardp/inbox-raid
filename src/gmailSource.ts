@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { AuthExpiredError, mailtoAddress, type ActionKind, type InboxSource, type Mail, type UnsubPlan, type UnsubResult } from './types';
 
 // Real mode. Talks to the Gmail API straight from the browser with a short-lived token.
@@ -148,7 +149,7 @@ export class GmailSource implements InboxSource {
       });
     } catch (err) {
       if (attempt >= tries) throw err;
-      return again(opts.quick ? backoff : 1500, 'Gmail is not answering, retrying...');
+      return again(opts.quick ? backoff : 1500, t('gmail.noAnswer'));
     }
     if (res.status === 401) throw new AuthExpiredError();
     const limited = res.status === 429 || (res.status === 403 && /rate/i.test(await res.clone().text()));
@@ -156,7 +157,7 @@ export class GmailSource implements InboxSource {
       // The scan waits for the per-minute quota to refill; an action only retries briefly.
       const retryAfter = Number(res.headers.get('Retry-After')) || 0;
       const waitMs = opts.quick ? backoff : res.status >= 500 ? 2000 : Math.max(retryAfter * 1000, 15_000);
-      return again(waitMs, res.status >= 500 ? 'Gmail hiccup, retrying...' : 'Gmail asked us to slow down...');
+      return again(waitMs, res.status >= 500 ? t('gmail.hiccup') : t('gmail.slow'));
     }
     if (!res.ok) throw new GmailError(res.status, await res.text());
     return res.status === 204 ? (undefined as T) : res.json();

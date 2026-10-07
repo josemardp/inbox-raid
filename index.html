@@ -5,32 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Inbox Raid</title>
     <meta name="description" content="An arcade raid on your real inbox. Every enemy you kill is an email that really leaves your inbox." />
-    <meta name="theme-color" content="#0b0b1e" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 11 9' shape-rendering='crispEdges'%3E%3Cpath fill='%23ff2e88' d='M2 0h1v1H2zM8 0h1v1H8zM3 1h5v1H3zM2 2h7v1H2zM1 3h2v1H1zM4 3h3v1H4zM8 3h2v1H8zM0 4h11v1H0zM0 5h1v2H0zM2 5h7v1H2zM10 5h1v2h-1zM2 6h1v1H2zM8 6h1v1H8zM3 7h2v1H3zM6 7h2v1H6z'/%3E%3C/svg%3E" />
+    <meta name="theme-color" content="#0a1024" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 11 9'%3E%3Cg fill='%2375dbf3'%3E%3Ccircle cx='3.5' cy='.5' r='.45'/%3E%3Ccircle cx='5.5' cy='.5' r='.45'/%3E%3Ccircle cx='7.5' cy='.5' r='.45'/%3E%3Ccircle cx='2.5' cy='2.5' r='.45'/%3E%3Ccircle cx='4.5' cy='2.5' r='.45'/%3E%3Ccircle cx='6.5' cy='2.5' r='.45'/%3E%3Ccircle cx='8.5' cy='2.5' r='.45'/%3E%3Ccircle cx='1.5' cy='4.5' r='.45'/%3E%3Ccircle cx='3.5' cy='4.5' r='.45'/%3E%3Ccircle cx='5.5' cy='4.5' r='.45'/%3E%3Ccircle cx='7.5' cy='4.5' r='.45'/%3E%3Ccircle cx='9.5' cy='4.5' r='.45'/%3E%3Ccircle cx='2.5' cy='6.5' r='.45'/%3E%3Ccircle cx='8.5' cy='6.5' r='.45'/%3E%3Ccircle cx='1.5' cy='8.5' r='.45'/%3E%3Ccircle cx='9.5' cy='8.5' r='.45'/%3E%3C/g%3E%3Cg fill='%23ff6e67'%3E%3Ccircle cx='3.5' cy='3.5' r='.5'/%3E%3Ccircle cx='7.5' cy='3.5' r='.5'/%3E%3C/g%3E%3C/svg%3E" />
   </head>
   <body>
     <div id="stage">
       <header id="hud" hidden>
-        <div class="hud-cell hud-inbox">
-          <span class="label">INBOX</span>
-          <span id="inbox-count" class="big">0</span>
-        </div>
-        <div class="hud-cell hud-score">
-          <span class="label">SCORE</span>
-          <span id="score" class="big">0</span>
-          <span id="combo" class="combo"></span>
-        </div>
-        <div class="hud-cell hud-right">
-          <span class="label">TIME <b id="time">0:00</b></span>
-          <span class="label">STRESS</span>
-          <div class="stress"><i id="stress-fill"></i></div>
-        </div>
+        <div class="stat score"><span class="label" id="hud-score-label">SCORE</span><strong id="score">0</strong></div>
+        <div class="stat time"><span class="label" id="hud-time-label">TIME</span><strong id="time">0:00</strong></div>
       </header>
-      <main id="screen"></main>
+      <div id="arena">
+        <main id="screen"></main>
+        <aside id="stack" hidden>
+          <figure class="dial"><svg id="dial-inbox" aria-hidden="true"></svg><figcaption id="dial-inbox-label">INBOX</figcaption></figure>
+          <div class="gear"><span class="label" id="gear-label">COMBO</span><strong id="combo">x1</strong></div>
+          <figure class="dial"><svg id="dial-stress" aria-hidden="true"></svg><figcaption id="dial-stress-label">STRESS</figcaption></figure>
+        </aside>
+      </div>
       <footer id="controls"></footer>
     </div>
     <canvas id="fx" aria-hidden="true"></canvas>
-    <div class="crt" aria-hidden="true"></div>
     <div id="toast" role="status" aria-live="polite"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

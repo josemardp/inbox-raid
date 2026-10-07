@@ -1,7 +1,8 @@
-// Every sender gets its own pixel monster, generated from its address.
-// Same sender, same monster, every time.
+// Every sender gets its own monster, generated from its address.
+// Same sender, same monster, every time. Drawn as a grid of lights.
 
-export const PALETTE = ['#ff2e88', '#29e7ff', '#ffd23f', '#3cff7a', '#b06bff', '#ff8a3d'];
+export const PALETTE = ['#75dbf3', '#4aa3ff', '#ff6e67', '#9fe6ff', '#3fd0c9', '#b9c8ff'];
+const CORAL = '#ff6e67';
 
 function hash(s: string): number {
   let h = 2166136261;
@@ -49,21 +50,28 @@ function grids(key: string, w: number, h: number): boolean[][][] {
   return [base, alt];
 }
 
-/** Draws a monster on a canvas sized w x h logical pixels. CSS scales it up crisp. */
-export function drawMonster(canvas: HTMLCanvasElement, key: string, w = 11, h = 9, frame = 0, color = colorFor(key)) {
+/**
+ * Draws a monster: one round light per cell of its grid, `cell` canvas pixels apart.
+ * Coral eyes (white on a coral body) and a white mouth.
+ */
+export function drawMonster(canvas: HTMLCanvasElement, key: string, w = 11, h = 9, frame = 0, color = colorFor(key), cell = 12) {
   const g = grids(key, w, h)[frame % 2];
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = w * cell;
+  canvas.height = h * cell;
   const ctx = canvas.getContext('2d')!;
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = color;
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (g[y][x]) ctx.fillRect(x, y, 1, 1);
-  // Face: white eyes that blink between frames, and a dark mouth.
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
   const cx = Math.floor(w / 2), eyeY = Math.floor(h * 0.35), ex = Math.max(1, Math.floor(w / 4));
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(cx - ex, eyeY, 1, 1);
-  ctx.fillRect(cx + ex, eyeY, 1, 1);
-  ctx.fillStyle = '#0b0b1e';
-  ctx.fillRect(cx - ex + 1, eyeY + 2, 2 * ex - 1, 1);
-  if (frame % 2) ctx.fillRect(cx, eyeY + 1, 1, 1);
+  const eye = color === CORAL ? '#ffffff' : CORAL;
+  // Blink: on the second frame the eyes close to body colour.
+  const blink = frame % 4 === 3;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!g[y][x]) continue;
+    let c = color;
+    if (y === eyeY && (x === cx - ex || x === cx + ex) && !blink) c = eye;
+    else if (y === eyeY + 2 && x > cx - ex && x < cx + ex) c = '#f5f8fc';
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.arc(x * cell + cell / 2, y * cell + cell / 2, cell * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }

@@ -1,3 +1,4 @@
+import { fmt, t } from './i18n';
 import type { Raid } from './raid';
 import { colorFor, drawMonster } from './sprites';
 
@@ -6,108 +7,115 @@ import { colorFor, drawMonster } from './sprites';
 
 const W = 1200;
 const H = 630;
-const FONT = '"Press Start 2P", monospace';
+const FONT = '"Space Grotesk", sans-serif';
+const MONO = '"DM Mono", monospace';
 const SITE = 'josemardp.github.io/inbox-raid';
-
-const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
+const C = { void: '#0a1024', navy: '#111d3c', panel: '#eef3fa', ink: '#0d1830', muted: '#5b6884', light: '#c7d2e6', blue: '#1f8bff', cyan: '#5fd3ec', coral: '#ff6e67', tile: '#dce5f2' };
 
 function clock(ms: number): string {
   const s = Math.floor(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-function text(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, size: number, color: string, align: CanvasTextAlign = 'left', shadow = 0) {
-  ctx.font = `${size}px ${FONT}`;
+function text(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, font: string, color: string, align: CanvasTextAlign = 'left') {
+  ctx.font = font;
   ctx.textAlign = align;
   ctx.textBaseline = 'alphabetic';
-  if (shadow) {
-    ctx.fillStyle = '#000';
-    ctx.fillText(s, x + shadow, y + shadow);
-  }
   ctx.fillStyle = color;
   ctx.fillText(s, x, y);
 }
 
+/** A panel with the two cut corners used across the game. */
+function panel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, cut = 22) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x + cut, y);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + h - cut);
+  ctx.lineTo(x + w - cut, y + h);
+  ctx.lineTo(x, y + h);
+  ctx.lineTo(x, y + cut);
+  ctx.closePath();
+  ctx.fill();
+}
+
 export async function renderShareCard(r: Raid, isDemo: boolean): Promise<HTMLCanvasElement> {
-  await document.fonts.load(`20px ${FONT}`);
+  await Promise.all([document.fonts.load(`700 40px ${FONT}`), document.fonts.load(`500 16px ${MONO}`)]);
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
   const ctx = c.getContext('2d')!;
-  ctx.imageSmoothingEnabled = false;
 
-  // Background: night grid with a purple glow at the bottom.
-  ctx.fillStyle = '#0b0b1e';
+  ctx.fillStyle = C.void;
   ctx.fillRect(0, 0, W, H);
-  const glow = ctx.createRadialGradient(W / 2, H * 1.2, 0, W / 2, H * 1.2, W * 0.7);
-  glow.addColorStop(0, '#2a1450');
-  glow.addColorStop(1, '#0b0b1e00');
+  const glow = ctx.createRadialGradient(W * 0.2, H * 0.25, 0, W * 0.2, H * 0.25, W * 0.5);
+  glow.addColorStop(0, '#1f8bff33');
+  glow.addColorStop(1, '#1f8bff00');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#ffffff0a';
-  for (let x = 0; x < W; x += 32) ctx.fillRect(x, 0, 1, H);
-  for (let y = 0; y < H; y += 32) ctx.fillRect(0, y, W, 1);
 
-  // Frame.
-  ctx.strokeStyle = '#29e7ff';
-  ctx.lineWidth = 8;
-  ctx.strokeRect(20, 20, W - 40, H - 40);
-
-  text(ctx, 'INBOX', 60, 92, 30, '#29e7ff', 'left', 4);
-  text(ctx, 'RAID', 236, 92, 30, '#ff2e88', 'left', 4);
-  text(ctx, isDemo ? 'DEMO RAID' : 'REAL INBOX', W - 60, 88, 16, isDemo ? '#8a8fc0' : '#3cff7a', 'right');
-
+  // Left: the radar with the result.
+  const L = { x: 36, y: 36, w: 500, h: H - 72 };
+  panel(ctx, L.x, L.y, L.w, L.h, C.navy, 34);
+  const cx = L.x + L.w / 2, cy = L.y + 250;
+  ctx.lineWidth = 2;
+  for (const [rad, col] of [[210, '#5fd3ec55'], [150, '#1f8bffaa']] as const) {
+    ctx.strokeStyle = col;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = C.cyan;
+  ctx.lineWidth = 14;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 180, -1.9, -0.2);
+  ctx.stroke();
+  text(ctx, isDemo ? t('card.demo') : t('card.real'), L.x + 30, L.y + 46, `500 16px ${MONO}`, C.cyan);
   const zero = r.inboxLeft === 0;
-  text(ctx, zero ? 'INBOX ZERO' : 'STAGE CLEAR', W / 2, 200, 64, '#ffd23f', 'center', 6);
+  text(ctx, zero ? t('clear.zero') : t('clear.stage'), cx, cy - 30, `700 56px ${FONT}`, '#ffffff', 'center');
+  text(ctx, `${fmt(r.inboxStart)}  →  ${fmt(r.inboxLeft)}`, cx, cy + 50, `700 54px ${FONT}`, C.cyan, 'center');
 
-  // Before -> after, centred as one group whatever the widths of the two numbers.
-  const from = fmt(r.inboxStart);
-  const to = fmt(r.inboxLeft);
-  const gap = 60;
-  ctx.font = `52px ${FONT}`;
-  const wFrom = ctx.measureText(from).width;
-  const x0 = W / 2 - (wFrom + gap * 2 + ctx.measureText(to).width) / 2;
-  text(ctx, from, x0, 300, 52, '#ff2e88', 'left', 4);
-  text(ctx, '>', x0 + wFrom + gap, 296, 36, '#8a8fc0', 'center');
-  text(ctx, to, x0 + wFrom + gap * 2, 300, 52, '#3cff7a', 'left', 4);
-
-  // Stats row.
-  const cleared = r.stats.archived + r.stats.trashed + r.stats.starred;
-  const stats: [string, string][] = [
-    ['CLEARED', fmt(cleared)],
-    ['BOSSES', `${r.stats.bossesDown}/${r.bosses.length}`],
-    ['UNSUBS', String(r.stats.unsubscribed)],
-    ['COMBO', `x${r.stats.maxCombo}`],
-    ['TIME', clock(r.elapsedMs)],
-  ];
-  const colW = (W - 120) / stats.length;
-  stats.forEach(([label, value], i) => {
-    const cx = 60 + colW * i + colW / 2;
-    ctx.strokeStyle = '#2c2c5a';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(60 + colW * i + 6, 340, colW - 12, 96);
-    text(ctx, label, cx, 374, 12, '#8a8fc0', 'center');
-    text(ctx, value, cx, 418, 24, '#ffd23f', 'center');
-  });
-
-  // The bosses that went down, as a trophy row.
-  const fallen = r.bosses.filter((b) => b.status !== 'alive' && b.status !== 'spared').slice(0, 10);
+  // The bosses that went down, as a trophy row of lights.
+  const fallen = r.bosses.filter((b) => b.status !== 'alive' && b.status !== 'spared').slice(0, 6);
   const sprite = document.createElement('canvas');
-  const size = 66;
-  const rowW = fallen.length * (size + 18) - 18;
+  const size = 56;
+  const rowW = fallen.length * (size + 14) - 14;
   fallen.forEach((b, i) => {
-    drawMonster(sprite, b.key, 11, 9, 0, colorFor(b.key));
-    const x = W / 2 - rowW / 2 + i * (size + 18);
-    ctx.drawImage(sprite, x, 462, size, size * 9 / 11);
+    drawMonster(sprite, b.key, 11, 9, 0, colorFor(b.key), 12);
+    const x = cx - rowW / 2 + i * (size + 14);
+    ctx.drawImage(sprite, x, L.y + L.h - 96, size, size * 9 / 11);
     if (b.status === 'unsubscribed') {
-      ctx.strokeStyle = '#ffd23f';
+      ctx.strokeStyle = C.coral;
       ctx.lineWidth = 3;
-      ctx.strokeRect(x - 6, 456, size + 12, size * 9 / 11 + 12);
+      ctx.strokeRect(x - 6, L.y + L.h - 102, size + 12, size * 9 / 11 + 12);
     }
   });
 
-  text(ctx, `SCORE ${fmt(r.score)}`, 60, H - 52, 18, '#e8e8ff');
-  text(ctx, SITE, W - 60, H - 52, 16, '#29e7ff', 'right');
+  // Right: the ceramic report.
+  const R = { x: 556, y: 36, w: W - 592, h: H - 72 };
+  panel(ctx, R.x, R.y, R.w, R.h, C.panel);
+  text(ctx, 'INBOX', R.x + 34, R.y + 82, `700 56px ${FONT}`, C.ink);
+  ctx.font = `700 56px ${FONT}`;
+  text(ctx, 'RAID', R.x + 34 + ctx.measureText('INBOX ').width, R.y + 82, `700 56px ${FONT}`, C.blue);
+  const cleared = r.stats.archived + r.stats.trashed + r.stats.starred;
+  const stats: [string, string][] = [
+    [t('card.cleared'), fmt(cleared)],
+    [t('card.bosses'), `${r.stats.bossesDown}/${r.bosses.length}`],
+    [t('card.unsubs'), String(r.stats.unsubscribed)],
+    [t('card.combo'), `x${r.stats.maxCombo}`],
+    [t('card.time'), clock(r.elapsedMs)],
+    [t('card.score'), fmt(r.score)],
+  ];
+  const colW = (R.w - 68 - 16) / 3;
+  stats.forEach(([label, value], i) => {
+    const x = R.x + 34 + (i % 3) * (colW + 8);
+    const y = R.y + 130 + Math.floor(i / 3) * 128;
+    ctx.fillStyle = C.tile;
+    ctx.fillRect(x, y, colW, 118);
+    text(ctx, label, x + 18, y + 36, `500 15px ${MONO}`, C.muted);
+    text(ctx, value, x + 18, y + 92, `700 44px ${FONT}`, i === 5 ? C.blue : C.ink);
+  });
+  text(ctx, SITE, R.x + 34, R.y + R.h - 34, `500 18px ${MONO}`, C.blue);
   return c;
 }
 
