@@ -101,6 +101,24 @@ const HORDE: [string, string, string, string][] = [
   ['Hackyard', 'hello@hackyard.example', 'Yard #4 kicks off now', 'Build solo, any AI model. Ship by Friday.'],
 ];
 
+// The full text of some horde emails, for the quest briefing. The rest show their preview.
+const BODIES: Record<string, string> = {
+  'karen@work.example': 'Hi,\n\nCan you jump on a call in 5? It is urgent but also not really. I need the Q3 numbers before the meeting on Thursday at 10am.\n\nCould you send me the latest version of the spreadsheet?\n\nKaren',
+  'alex@friends.example': 'Hey!\n\nLong time no see. I am in town until Friday. Coffee next week? Tuesday or Wednesday afternoon works for me.\n\nLet me know!\nAlex',
+  'office@maple.example': 'Dear parent,\n\nThe parent-teacher meeting is on Friday at 6pm in room 12.\n\nPlease confirm your attendance by replying to this email.\n\nMaple School office',
+  'billing@powerco.example': 'Your bill is due in 3 days.\n\nAmount due: $148.20 (more than last month).\nDue date: the 15th.\n\nPay online or by bank slip. Ignore this message if you have already paid.\n\nPowerCo billing',
+  'calendar@work.example': 'Invitation: Meeting about the meeting\nWhen: Monday, 9:00 to 10:30\nWhere: Room B (and online)\n\nAgenda: discuss the agenda for the upcoming meeting.\n\nGoing? Yes / No / Maybe',
+  'tom@street.example': 'Hi neighbor,\n\nIs this your cat? It has been sitting on my car for 3 hours. It seems happy. Grey, very fluffy, judges me through the window.\n\nTom, house 42',
+  'mom@family.example': 'Call me when you can.\n\nAlso, did you eat today? Real food? Not just coffee.\n\nLove, Mom',
+  'it@work.example': 'Your password expires today. Click the link below and enter your current password to keep your account.\n\nYour new password must not match any of your last 400 passwords.\n\nIT Department',
+  'invoice@totally-legit.example': 'RE: RE: RE: your invoice\n\nOpen the attached invoice.zip.exe immediately or your account will be suspended. Send us your bank password to confirm.',
+  'results@clinic.example': 'Your lab results are available.\n\nLog in to the patient portal to view them. If you have questions, schedule an appointment with your doctor.\n\nCity Clinic',
+};
+
+export function demoBody(m: Mail): string {
+  return BODIES[m.fromEmail] ?? `${m.snippet || m.subject}\n\n${m.fromName}`;
+}
+
 // Deterministic PRNG so the demo looks the same every time (mulberry32).
 function rng(seed: number) {
   return () => {

@@ -91,3 +91,37 @@ describe('Raid.unsubFailed', () => {
     expect(bosses[0].status).toBe('archived');
   });
 });
+
+describe('Raid triage board', () => {
+  it('hits any card in the queue; undo puts it back at the front', () => {
+    const a = mail('a@x.com'), b = mail('b@x.com'), c = mail('c@x.com');
+    const r = new Raid([], [a, b, c]);
+    const hit = r.hitMail('trash', c.id)!;
+    expect(hit.mail).toBe(c);
+    expect(r.mail).toBe(a);
+    expect(r.horde.slice(r.hordeIdx)).toEqual([a, b]);
+    r.undo();
+    expect(r.mail).toBe(c);
+    expect(r.inboxLeft).toBe(3);
+  });
+
+  it('ignores a card that is already gone', () => {
+    const a = mail('a@x.com'), b = mail('b@x.com');
+    const r = new Raid([], [a, b]);
+    r.hitMail('archive', a.id);
+    expect(r.hitMail('archive', a.id)).toBeNull();
+    expect(r.inboxLeft).toBe(1);
+  });
+
+  it('draft points survive an undo of an earlier hit', () => {
+    const a = mail('a@x.com'), b = mail('b@x.com');
+    const r = new Raid([], [a, b]);
+    r.hitMail('star', a.id);
+    const before = r.score;
+    r.bonus(300);
+    expect(r.score).toBe(before + 300);
+    r.undo();
+    expect(r.score).toBe(300);
+    expect(r.stats.drafts).toBe(1);
+  });
+});

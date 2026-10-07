@@ -22,6 +22,8 @@ export interface Stats {
   bossesDown: number;
   spared: number;
   maxCombo: number;
+  /** Reply drafts written from a quest briefing (never sent by the game). */
+  drafts: number;
 }
 
 /** What one hit did, so the UI can animate it and the source can apply it. */
@@ -92,7 +94,7 @@ export class Raid {
   /** 0..100. Fills while you hesitate, drains when you act. */
   stress = 0;
   quests: Mail[] = [];
-  stats: Stats = { archived: 0, trashed: 0, starred: 0, unsubscribed: 0, bossesDown: 0, spared: 0, maxCombo: 1 };
+  stats: Stats = { archived: 0, trashed: 0, starred: 0, unsubscribed: 0, bossesDown: 0, spared: 0, maxCombo: 1, drafts: 0 };
   startedAt = performance.now();
   endedAt = 0;
   private lastActionAt = 0;
@@ -162,9 +164,19 @@ export class Raid {
     return hit;
   }
 
-  hitMail(move: HordeMove): Hit | null {
+  /**
+   * Hits the next horde email, or the one with `id` (the triage board lets the player pick
+   * any card in the queue: it is moved to the front first, so undo brings it back there).
+   */
+  hitMail(move: HordeMove, id?: string): Hit | null {
+    if (this.phase !== 'horde') return null;
+    if (id) {
+      const at = this.horde.findIndex((m, i) => i >= this.hordeIdx && m.id === id);
+      if (at < 0) return null;
+      if (at > this.hordeIdx) this.horde.splice(this.hordeIdx, 0, ...this.horde.splice(at, 1));
+    }
     const mail = this.mail;
-    if (this.phase !== 'horde' || !mail) return null;
+    if (!mail) return null;
     const snap = this.snapshot(null);
     const combo = this.bumpCombo();
     const points = (move === 'star' ? 50 : 100) * combo;
@@ -181,6 +193,22 @@ export class Raid {
     const hit: Hit = { kind: move, ids: [mail.id], points, combo, mail };
     this.history.push({ ...snap, hit });
     return hit;
+  }
+
+  /**
+   * Points for a reply draft. They stay through undo: the draft is in Gmail no matter
+   * what happens to the hits before it.
+   */
+  bonus(points: number) {
+    this.score += points;
+    this.stats.drafts++;
+    for (const s of this.history) { s.score += points; s.stats.drafts++; }
+  }
+
+  /** Time the game stood still (reading a briefing) counts for nothing: no clock, combo or stress. */
+  paused(ms: number) {
+    if (!this.endedAt) this.startedAt += ms;
+    this.waited(ms);
   }
 
   /** Rolls the game back one hit. Returns that hit so the source can undo it too. */

@@ -9,7 +9,10 @@ import '@fontsource/dm-mono/latin-ext-400.css';
 import '@fontsource/dm-mono/latin-ext-500.css';
 import './style.css';
 import { comboSfx, drainSfx, fanfare, isMuted, music, sfx, toggleMute, unlockAudio } from './audio';
+import { bindBoard } from './board';
+import { briefingOpen, openBriefing } from './briefing';
 import { makeDial } from './dials';
+import { esc, redact } from './html';
 import { DemoSource } from './demoSource';
 import { GmailSource, preloadGoogle, signIn } from './gmailSource';
 import { burst, centreOf, flash, floatText, initFx, shake, stamp } from './fx';
@@ -58,11 +61,6 @@ const WHITE = '#f2f7fd';
 
 // ---------- helpers ----------
 
-/** Mail data can come from a real inbox: always escape before innerHTML. */
-function esc(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-}
-
 // Privacy mode, made for recording: every subject, preview and horde sender is blacked
 // out. A boss keeps its name only when it looks like a bulk sender (brands make the video);
 // a boss that looks like a person is blacked out too.
@@ -75,10 +73,16 @@ const PERSONAL_DOMAINS = /@(gmail|googlemail|hotmail|outlook|live|msn|yahoo|ymai
 const isPerson = (m: Mail) =>
   !m.listUnsubscribe || PERSONAL_DOMAINS.test(m.fromEmail) || /\svia\s/i.test(m.fromName) || /@googlegroups\.com$/i.test(m.fromEmail);
 
-/** A black bar about as long as the text. The text itself never reaches the page. */
-function redact(text: string): string {
-  return `<span class="redact" aria-label="hidden">${'x'.repeat(Math.max(4, Math.min(text.length, 28)))}</span>`;
+// How the horde is played: one card at a time (classic) or the drag and drop triage board.
+type PlayStyle = 'classic' | 'board';
+let style: PlayStyle = 'classic';
+try { if (localStorage.getItem('inbox-raid-style') === 'board') style = 'board'; } catch { /* storage blocked */ }
+
+function setStyle(s: PlayStyle) {
+  style = s;
+  try { localStorage.setItem('inbox-raid-style', s); } catch { /* storage blocked */ }
 }
+
 /** A sender name or address: hidden in privacy mode when it is a person. */
 function who(text: string, person: boolean): string {
   return privacy && person ? redact(text) : esc(text);
@@ -212,7 +216,8 @@ function hudLoop(tm: number) {
   lastTick = tm;
   if (raid && (view === 'boss' || view === 'horde')) {
     if (!busy && !needsAuth && raid.tick(dt)) overload();
-    $('#time').textContent = clock(raid.elapsedMs);
+    // A briefing stops the clock (the time is given back when it closes).
+    if (!briefingOpen()) $('#time').textContent = clock(raid.elapsedMs);
     dialStress.update(raid.stress / 100);
   }
   if (raid && !stack.hidden) {
@@ -261,6 +266,14 @@ function showTitle() {
         <li><span>${t('title.how.horde')}</span></li>
         <li class="dim"><span>${t('title.how.safe')}</span></li>
       </ul>
+      <div class="styles" role="radiogroup" aria-label="${t('style.label')}">
+        <p class="hp-label">${t('style.label')} · <kbd>T</kbd></p>
+        ${(['classic', 'board'] as PlayStyle[]).map((s) => `
+          <button class="style-opt ${style === s ? 'on' : ''}" role="radio" aria-checked="${style === s}" data-action="style-${s}">
+            <i class="style-icon ${s}" aria-hidden="true"></i>
+            <b>${t(`style.${s}`)}</b><span>${t(`style.${s}.sub`)}</span>
+          </button>`).join('')}
+      </div>
       ${best ? `<p class="best">${t('title.best')} <b>${fmt(best)}</b></p>` : ''}
     </section>`;
   controls.innerHTML = `
@@ -491,6 +504,7 @@ function pressButton(action: string) {
 }
 
 function showHorde() {
+  if (style === 'board') return showBoard();
   const r = raid!;
   const mail = r.mail!;
   layout('horde');
@@ -533,10 +547,17 @@ async function hordeMove(move: HordeMove) {
   const [x, y] = centreOf($('.card-sprite'));
   const comboBefore = r.combo;
   const hit = r.hitMail(move)!;
-  updateHud();
-  tweenInbox(r.inboxLeft, 250);
   el.classList.add(`fly-${move}`);
   $('.card-sprite').classList.add('dead');
+  await landHit(hit, comboBefore, x, y, src, run);
+}
+
+/** Effects of a horde hit, then the real action in the inbox. Shared by both play styles. */
+async function landHit(hit: Hit, comboBefore: number, x: number, y: number, src: InboxSource, run: number) {
+  const r = raid!;
+  const move = hit.kind;
+  updateHud();
+  tweenInbox(r.inboxLeft, 250);
   const color = move === 'trash' ? CORAL : move === 'star' ? BLUE : colorFor(hit.mail!.fromEmail);
   burst(x, y, color, 22 + hit.combo * 4, 6, 6);
   sfx(move === 'trash' ? 'trash' : move === 'star' ? 'coin' : 'hit', 1 + hit.combo * 0.04);
@@ -552,6 +573,151 @@ async function hordeMove(move: HordeMove) {
   r.waited(performance.now() - t0);
   busy = false;
   next();
+}
+
+// ---------- triage board ----------
+
+const QUEUE_SHOWN = 5;
+/** Points for a reply draft saved from a briefing. */
+const DRAFT_POINTS = 300;
+/** The card the keyboard (and a tap on a zone) acts on. */
+let selectedId = '';
+/** Cards already on the board, so only new arrivals slide in. */
+let onBoard = new Set<string>();
+
+function showBoard() {
+  const r = raid!;
+  layout('horde');
+  arena.classList.add('board');
+  armedAt = performance.now() + ARM_CARD_MS;
+  const left = r.horde.slice(r.hordeIdx);
+  const shown = left.slice(0, QUEUE_SHOWN);
+  if (!shown.some((m) => m.id === selectedId)) selectedId = shown[0]?.id ?? '';
+  const zone = (id: string, key: string, label: string, sub: string, count: number) => `
+    <button class="zone z-${id}" data-zone="${id}" data-action="${id === 'act' ? 'star' : id}">
+      <i class="zone-mouth" aria-hidden="true"></i>
+      <span class="zone-top"><kbd>${key}</kbd><b>${label}</b><em>${fmt(count)}</em></span>
+      <span class="zone-sub">${sub}</span>
+    </button>`;
+  screen.innerHTML = `
+    <section class="panel orbit queue">
+      <p class="orbit-tag">${t('board.queue')} <b>${r.hordeIdx + 1} / ${r.horde.length}</b></p>
+      <ol class="queue-list">${shown.map((m) => miniCard(m, !onBoard.has(m.id))).join('')}</ol>
+      ${left.length > shown.length ? `<p class="queue-more">${t('board.more', { n: left.length - shown.length })}</p>` : ''}
+    </section>
+    <section class="panel brief zones">
+      ${zone('archive', '&larr;', t('board.archive'), t('board.archive.sub'), r.stats.archived)}
+      ${zone('trash', '&darr;', t('board.trash'), t('board.trash.sub'), r.stats.trashed)}
+      ${zone('act', '&rarr;', `${t('board.act')} &#9733;`, t('board.act.sub'), r.stats.starred)}
+      <p class="fine board-hint">${t('board.hint')}</p>
+    </section>`;
+  onBoard = new Set(shown.map((m) => m.id));
+  controls.innerHTML = utilityRow();
+  animateMonsters();
+  bindBoard($('.queue-list'), [...screen.querySelectorAll<HTMLElement>('[data-zone]')], {
+    canDrag: () => !busy && !needsAuth && performance.now() >= armedAt,
+    tap: (card) => selectCard(card.dataset.id!),
+    drop: (zoneId, card) => boardAct(zoneId === 'act' ? 'star' : zoneId as HordeMove, card.dataset.id!, true),
+  });
+}
+
+function miniCard(m: Mail, fresh: boolean): string {
+  return `
+    <li class="mini-card ${m.id === selectedId ? 'sel' : ''} ${fresh ? 'enter' : ''}" data-id="${esc(m.id)}" tabindex="-1">
+      ${monster(m.fromEmail, 'mini', colorFor(m.fromEmail))}
+      <span class="mc-text"><b>${who(m.fromName, true)}</b><span>${what(m.subject || t('horde.nosubject'))}</span></span>
+      <time>${ago(m.date)}</time>
+    </li>`;
+}
+
+function selectCard(id: string) {
+  selectedId = id;
+  screen.querySelectorAll<HTMLElement>('.mini-card').forEach((c) => c.classList.toggle('sel', c.dataset.id === id));
+  sfx('tick');
+}
+
+/** ↑ walks the selection down the queue and wraps around. */
+function selectNext() {
+  const ids = [...screen.querySelectorAll<HTMLElement>('.mini-card')].map((c) => c.dataset.id!);
+  if (ids.length) selectCard(ids[(ids.indexOf(selectedId) + 1) % ids.length]);
+}
+
+/** A card goes to a zone. ACT (star) first opens the briefing, which decides its fate. */
+async function boardAct(move: HordeMove, id: string, dragged = false) {
+  const r = raid!;
+  if (!r.horde.slice(r.hordeIdx).some((m) => m.id === id)) return;
+  if (move === 'star') return openAct(id, dragged);
+  boardMove(move, id, dragged);
+}
+
+async function boardMove(move: HordeMove, id: string, dragged: boolean) {
+  const r = raid!;
+  const src = source;
+  const run = runId;
+  busy = true;
+  pressZone(move);
+  const zoneEl = $(`[data-zone="${move === 'star' ? 'act' : move}"]`);
+  if (!dragged) screen.querySelector(`.mini-card[data-id="${CSS.escape(id)}"]`)?.classList.add(`zap-${move}`);
+  else screen.querySelector(`.mini-card[data-id="${CSS.escape(id)}"]`)?.classList.add('gone');
+  const comboBefore = r.combo;
+  const hit = r.hitMail(move, id);
+  if (!hit) { busy = false; return; }
+  const [x, y] = centreOf(zoneEl);
+  await landHit(hit, comboBefore, x, y, src, run);
+}
+
+function pressZone(move: HordeMove) {
+  const z = screen.querySelector<HTMLElement>(`[data-zone="${move === 'star' ? 'act' : move}"]`);
+  if (!z) return;
+  z.classList.add('gulp');
+  setTimeout(() => z.classList.remove('gulp'), 360);
+}
+
+/** ACT: the clock stops, the briefing opens, and the player picks what happens. */
+async function openAct(id: string, dragged: boolean) {
+  const r = raid!;
+  const mail = r.horde.slice(r.hordeIdx).find((m) => m.id === id);
+  if (!mail) return;
+  const run = runId;
+  busy = true;
+  const t0 = performance.now();
+  const res = await openBriefing({ mail, source, person: isPerson(mail), privacy, inRaid: true, toast });
+  if (run !== runId || raid !== r) return;
+  r.paused(performance.now() - t0);
+  busy = false;
+  if (res.authExpired) {
+    needsAuth = true;
+    toast(t('toast.expired'), 4000);
+    return showBoard();
+  }
+  if (!res.move) return showBoard();
+  if (res.drafted) {
+    // Before the hit, so undoing the hit keeps the points: the draft stays in Gmail.
+    r.bonus(DRAFT_POINTS);
+    stamp(t('fx.mission'), CYAN);
+  }
+  boardMove(res.move, id, dragged && res.move === 'star');
+}
+
+/** After the raid: a quest from the log opens its briefing, only to write a draft. */
+async function briefQuest(id: string) {
+  const r = raid!;
+  const mail = r.quests.find((m) => m.id === id);
+  if (!mail || busy) return;
+  const run = runId;
+  busy = true;
+  const res = await openBriefing({ mail, source, person: isPerson(mail), privacy, inRaid: false, toast });
+  if (run !== runId || raid !== r) return;
+  busy = false;
+  if (res.authExpired) { needsAuth = true; toast(t('toast.expired'), 4000); }
+  if (res.drafted) {
+    r.bonus(DRAFT_POINTS);
+    if (r.score > readBest()) writeBest(r.score);
+    sfx('coin');
+    stamp(t('fx.mission'), CYAN);
+    updateHud();
+  }
+  renderClear();
 }
 
 function showClear() {
@@ -613,8 +779,10 @@ function renderClear() {
       </dl>
       ${r.quests.length ? `
         <div class="quests"><p class="hp-label">${t('clear.quests')}</p>
-        <ul>${r.quests.slice(0, QUESTS_SHOWN).map((m) => `<li>&#9733; <b>${who(m.fromName, true)}</b> ${what(m.subject)}</li>`).join('')}
-        ${r.quests.length > QUESTS_SHOWN ? `<li class="dim">${t('clear.more', { n: r.quests.length - QUESTS_SHOWN })}</li>` : ''}</ul></div>` : ''}
+        ${r.stats.drafts ? `<p class="drafts">&#10022; ${t('clear.drafts', { n: r.stats.drafts })}</p>` : ''}
+        <ul>${r.quests.slice(0, QUESTS_SHOWN).map((m) => `<li><button class="quest-item" data-brief-id="${esc(m.id)}" title="${t('clear.openBrief')}">&#9733; <b>${who(m.fromName, true)}</b> ${what(m.subject)}</button></li>`).join('')}
+        ${r.quests.length > QUESTS_SHOWN ? `<li class="dim">${t('clear.more', { n: r.quests.length - QUESTS_SHOWN })}</li>` : ''}</ul>
+        <p class="drafts dim">&#9656; ${t('clear.openBrief')}</p></div>` : ''}
       <p class="proof">${source.isDemo
         ? t('clear.demo')
         : `${t('clear.real')} <a href="${esc(inboxUrl)}" target="_blank" rel="noopener">${t('clear.check')} &rarr;</a>`}</p>
@@ -727,7 +895,7 @@ function redraw() {
   staticLabels();
   if (view === 'title') return showTitle();
   if (view === 'clear') return renderClear();
-  if ((view === 'boss' || view === 'horde') && !busy) {
+  if ((view === 'boss' || view === 'horde') && !busy && !briefingOpen()) {
     const armed = armedAt;
     if (view === 'boss') showBoss(); else showHorde();
     armedAt = armed;
@@ -761,6 +929,12 @@ function act(action: string) {
       if (action === 'demo') { sfx('select'); startRaid(new DemoSource()); }
       if (action === 'gmail' && !signingIn) raidGmail();
       if (action === 'privacy') { togglePrivacy(); showTitle(); }
+      if (action.startsWith('style')) {
+        const s: PlayStyle = action === 'style-board' ? 'board' : action === 'style-classic' ? 'classic' : style === 'board' ? 'classic' : 'board';
+        setStyle(s);
+        sfx('select');
+        showTitle();
+      }
       return;
     case 'scan':
       if (action === 'quit') { toast(t('toast.scanCancelled')); showTitle(); }
@@ -772,10 +946,12 @@ function act(action: string) {
       if (action === 'privacy') { togglePrivacy(); return redraw(); }
       if (action === 'undo') return void undo();
       if (action === 'reauth') return void reconnect();
+      if (action === 'next') return void (view === 'horde' && style === 'board' && selectNext());
       if (!MOVES.has(action)) return;
       if (needsAuth) return toast(t('toast.expired'), 3000);
       if (performance.now() < armedAt) return;
       if (view === 'boss') bossMove(action as BossMove);
+      else if (style === 'board') boardAct(action as HordeMove, selectedId);
       else hordeMove(action as HordeMove);
       return;
     }
@@ -848,9 +1024,9 @@ async function reconnect() {
 }
 
 const KEYS: Record<string, Record<string, string>> = {
-  title: { Enter: 'demo', ' ': 'demo', g: 'gmail', p: 'privacy' },
+  title: { Enter: 'demo', ' ': 'demo', g: 'gmail', p: 'privacy', t: 'style' },
   boss: { a: 'archive', u: 'unsubscribe', d: 'trash', s: 'spare', ArrowLeft: 'archive', ArrowDown: 'trash', Escape: 'quit', g: 'reauth', p: 'privacy' },
-  horde: { ArrowLeft: 'archive', a: 'archive', ArrowDown: 'trash', d: 'trash', ArrowRight: 'star', s: 'star', Escape: 'quit', g: 'reauth', p: 'privacy' },
+  horde: { ArrowLeft: 'archive', a: 'archive', ArrowDown: 'trash', d: 'trash', ArrowRight: 'star', s: 'star', ArrowUp: 'next', Escape: 'quit', g: 'reauth', p: 'privacy' },
   scan: { Escape: 'quit' },
   clear: { r: 'again', Enter: 'again', Escape: 'title', c: 'card', g: 'reauth', p: 'privacy' },
 };
@@ -874,6 +1050,16 @@ addEventListener('keydown', (e) => {
 
 controls.addEventListener('click', (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
+  if (btn && !btn.disabled) act(btn.dataset.action!);
+});
+
+// Buttons inside the screen: the style picker, the board zones (a tap sends the selected
+// card) and the quest log on the final screen.
+screen.addEventListener('click', (e) => {
+  const el = e.target as HTMLElement;
+  const quest = el.closest<HTMLElement>('[data-brief-id]');
+  if (quest && view === 'clear') { unlockAudio(); return void briefQuest(quest.dataset.briefId!); }
+  const btn = el.closest<HTMLButtonElement>('button[data-action]');
   if (btn && !btn.disabled) act(btn.dataset.action!);
 });
 

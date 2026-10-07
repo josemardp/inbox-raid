@@ -69,6 +69,17 @@ export interface UnsubResult {
   method: 'one-click' | 'mailto' | 'link' | 'none' | 'demo';
 }
 
+/** One email read in full, for a quest briefing. */
+export interface MailBody {
+  /** Plain text only: HTML is stripped, never rendered. */
+  text: string;
+  /** Where a reply goes (Reply-To, else From). */
+  replyTo: string;
+  /** Message-ID, so a draft lands in the same conversation. */
+  messageId: string;
+  threadId: string;
+}
+
 /** Where the emails come from and where actions really happen. */
 export interface InboxSource {
   readonly label: string;
@@ -86,6 +97,10 @@ export interface InboxSource {
   unsubscribe(plan: UnsubPlan): Promise<UnsubResult>;
   /** Puts emails back in the inbox exactly as before the action. */
   undo(kind: ActionKind, ids: string[]): Promise<void>;
+  /** Reads one email in full, only when the player opens its briefing. */
+  read(mail: Mail): Promise<MailBody>;
+  /** Saves a reply as a Gmail draft. Never sends: the player sends it from Gmail, or not. */
+  draft(mail: Mail, body: MailBody, text: string): Promise<void>;
   /** Stops a scan in progress (its load() then rejects). */
   cancel?(): void;
   /** Rereads the real inbox size, for an honest INBOX ZERO. */

@@ -1,5 +1,5 @@
-import { buildDemoInbox } from './demoInbox';
-import type { ActionKind, InboxSource, Mail, UnsubPlan, UnsubResult } from './types';
+import { buildDemoInbox, demoBody } from './demoInbox';
+import type { ActionKind, InboxSource, Mail, MailBody, UnsubPlan, UnsubResult } from './types';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -29,4 +29,13 @@ export class DemoSource implements InboxSource {
     return { ok: true, confirmed: true, method: 'demo' };
   }
   async undo(_kind: ActionKind, _ids: string[]) {}
+
+  async read(mail: Mail): Promise<MailBody> {
+    await wait(250);
+    return { text: demoBody(mail), replyTo: mail.fromEmail, messageId: '', threadId: '' };
+  }
+
+  async draft(_mail: Mail, _body: MailBody, _text: string) {
+    await wait(300);
+  }
 }

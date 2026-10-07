@@ -1,5 +1,5 @@
 import { t } from './i18n';
-import { AuthExpiredError, mailtoAddress, type ActionKind, type InboxSource, type Mail, type UnsubPlan, type UnsubResult } from './types';
+import { AuthExpiredError, mailtoAddress, type ActionKind, type InboxSource, type Mail, type MailBody, type UnsubPlan, type UnsubResult } from './types';
 
 // Real mode. Talks to the Gmail API straight from the browser with a short-lived token.
 // No server, no stored credentials. Scope gmail.modify cannot permanently delete anything.
@@ -313,6 +313,35 @@ export class GmailSource implements InboxSource {
     return this.modify(ids, ['INBOX'], []);
   }
 
+  async read(mail: Mail): Promise<MailBody> {
+    await this.paced();
+    const m = await this.call<{ threadId: string; payload: Part }>(`/messages/${mail.id}?format=full`, {}, QUICK);
+    const h = m.payload.headers ?? [];
+    const [, replyTo] = parseFrom(decodeWords(header(h, 'Reply-To') || header(h, 'From')));
+    return {
+      text: bodyText(m.payload) || mail.snippet,
+      replyTo: EMAIL.test(replyTo) ? replyTo : mail.fromEmail,
+      messageId: header(h, 'Message-ID').replace(/[\r\n]/g, ''),
+      threadId: m.threadId,
+    };
+  }
+
+  async draft(mail: Mail, body: MailBody, text: string) {
+    const subject = (/^re:/i.test(mail.subject) ? mail.subject : `Re: ${mail.subject}`).replace(/[\r\n]+/g, ' ');
+    const raw = [
+      `To: ${EMAIL.test(body.replyTo) ? body.replyTo : mail.fromEmail}`,
+      `Subject: ${encodeWord(subject)}`,
+      ...(body.messageId ? [`In-Reply-To: ${body.messageId}`, `References: ${body.messageId}`] : []),
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: base64',
+      '',
+      base64(text).replace(/.{76}/g, '$&\r\n'),
+    ].join('\r\n');
+    // A draft is only saved, never sent. No retries, so a slow Gmail cannot make two.
+    await this.call('/drafts', { method: 'POST', body: JSON.stringify({ message: { raw: base64url(raw), ...(body.threadId ? { threadId: body.threadId } : {}) } }) }, { tries: 0 });
+  }
+
   async unsubscribe(plan: UnsubPlan): Promise<UnsubResult> {
     if (plan.kind === 'one-click') {
       if (this.sent.has(plan.url)) return { ok: true, confirmed: false, method: 'one-click' };
@@ -355,6 +384,53 @@ function base64(s: string): string {
   let bin = '';
   bytes.forEach((b) => (bin += String.fromCharCode(b)));
   return btoa(bin);
+}
+
+/** A header value in UTF-8 encoded-word form when it is not plain ASCII. */
+function encodeWord(s: string): string {
+  return /^[\x20-\x7e]*$/.test(s) ? s : `=?UTF-8?B?${base64(s)}?=`;
+}
+
+interface Part {
+  mimeType?: string;
+  headers?: { name: string; value: string }[];
+  body?: { data?: string };
+  parts?: Part[];
+}
+
+function decodePart(p: Part): string {
+  const data = p.body?.data;
+  if (!data) return '';
+  const charset = /charset="?([\w-]+)/i.exec(header(p.headers ?? [], 'Content-Type'))?.[1] ?? 'utf-8';
+  const bytes = Uint8Array.from(atob(data.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+  try { return new TextDecoder(charset.toLowerCase()).decode(bytes); } catch { return new TextDecoder().decode(bytes); }
+}
+
+function findPart(p: Part, type: string): Part | undefined {
+  if (p.mimeType === type && p.body?.data) return p;
+  for (const c of p.parts ?? []) {
+    const hit = findPart(c, type);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/** The readable text of an email: its text/plain part, else its HTML reduced to text (never rendered). */
+export function bodyText(p: Part): string {
+  const plain = findPart(p, 'text/plain');
+  if (plain) return tidy(decodePart(plain));
+  const html = findPart(p, 'text/html');
+  if (!html) return '';
+  // DOMParser never runs scripts or loads images: it only turns markup into text.
+  const doc = new DOMParser().parseFromString(decodePart(html), 'text/html');
+  doc.querySelectorAll('script, style, head, title').forEach((el) => el.remove());
+  doc.querySelectorAll('br').forEach((el) => el.replaceWith('\n'));
+  doc.querySelectorAll('p, div, tr, li, h1, h2, h3, h4, table').forEach((el) => el.append('\n'));
+  return tidy(doc.body?.textContent ?? '');
+}
+
+function tidy(s: string): string {
+  return s.replace(/\r/g, '').replace(/[ \t ]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 20_000);
 }
 
 function base64url(s: string): string {
