@@ -1,8 +1,8 @@
 # STATUS: INBOX RAID
 
-Atualizado: 07/10/2026, ~12:45 (quarta, dia 3 do Hackyard).
-**Onde paramos:** redesign V2 publicado, bilíngue EN/PT, e vídeo final pronto e revisado (1:46). Falta só a **entrega do Speedrun no Hackyard até hoje 15:00** (o e-mail do Hackyard confirma: "Speedrun closes today at 18:00 UTC"). Entregar é ato final: só com o "sim" do Josemar.
-**Para retomar:** ler este arquivo. Próximo passo: entregar o Speedrun (repo + vídeo + texto abaixo) e, até sexta 09/10 15:00, a entrega final.
+Atualizado: 07/10/2026, ~13:25 (quarta, dia 3 do Hackyard).
+**Onde paramos:** **Speedrun ENTREGUE** em 07/10 ~13:23 (aparece na página da Yard #4 como @josemardp). Vídeo público no YouTube: https://youtu.be/3pmce3kaHck (canal "Melinda Show" da conta lojadares, por escolha do Josemar). Jogo com visual V2, bilíngue e som novo (sem chiado).
+**Para retomar:** ler este arquivo. Próximo passo: decidir se melhora algo para a entrega final (sexta 09/10 15:00); reenviar substitui a entrega atual.
 
 ## Onde estamos
 - **Jogo no ar:** https://josemardp.github.io/inbox-raid/ (commit `f546204` e seguintes).
@@ -40,14 +40,14 @@ Atualizado: 07/10/2026, ~12:45 (quarta, dia 3 do Hackyard).
   3. `node tools/video/base.mjs <pasta>`, depois `node tools/video/edit.mjs <pasta>`.
   - Plano e scripts de restaurar/limpar ficam em `.playwright-mcp/` (fora do git, só nesta máquina).
 
-## Entrega no Hackyard (falta o "sim" do Josemar)
+## Entrega no Hackyard (FEITA em 07/10, autorizada pelo Josemar)
 - Campos: repo (obrigatório), vídeo, texto até 500 caracteres, modelo de IA (Claude Code), recibo opcional. Entregar de novo substitui a entrega anterior.
-- **Texto sugerido (444 caracteres):**
+- Enviado: repo, vídeo https://youtu.be/3pmce3kaHck, modelo "Claude Opus 5.5" (editor/coding agent), print do chefão Cloudflare, e este texto (444 caracteres):
 > INBOX RAID turns inbox cleanup into an arcade raid. Senders who flood you become bosses whose HP is their email count; every hit really archives, trashes or unsubscribes in Gmail, and Z undoes it in Gmail too. Then a horde of single emails rewards fast calls with combos. Runs 100% in the browser, no server, in English and Portuguese. Play the no-login demo; the video shows a real inbox going to zero. Built solo with Claude Code for Yard #4.
 
 ## Próximo passo
-1. **Entregar o Speedrun até hoje 15:00** (repo, vídeo, texto acima, modelo Claude Code). [VERIFICAR: se o campo de vídeo aceita arquivo ou pede link (YouTube não listado?)].
-2. Até sexta 09/10 15:00 (meta 12:00): entrega final, com o mesmo pacote ou melhorado.
+1. Até sexta 09/10 15:00 (meta 12:00): entrega final. A atual já vale; reenviar só se houver melhoria (ideias: legenda "194 real emails" em vez de "in my inbox", GIF do modo real no README).
+2. Pendente sem pressa: os scripts de restaurar/limpar a caixa e o plano da partida estão só em  desta máquina.
 
 ## Decisões e dados fixos
 - Plano completo: [docs/PLANO.md](docs/PLANO.md).
