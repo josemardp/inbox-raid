@@ -13,6 +13,7 @@ export interface Boss {
 export type Phase = 'boss' | 'horde' | 'done';
 export type BossMove = 'archive' | 'trash' | 'unsubscribe' | 'spare';
 export type HordeMove = 'archive' | 'trash' | 'star';
+export type BadgeId = 'critical' | 'combo' | 'zero';
 
 export interface Stats {
   archived: number;
@@ -80,6 +81,8 @@ interface Snapshot {
   quests: number;
   bossStatus: BossStatus | null;
   lastActionAt: number;
+  /** Exact queue order before the hit, including an out-of-order board pick. */
+  horde: Mail[];
   hit: Hit;
 }
 
@@ -94,6 +97,8 @@ export class Raid {
   /** 0..100. Fills while you hesitate, drains when you act. */
   stress = 0;
   quests: Mail[] = [];
+  readonly badges = new Set<BadgeId>();
+  private draftedIds = new Set<string>();
   stats: Stats = { archived: 0, trashed: 0, starred: 0, unsubscribed: 0, bossesDown: 0, spared: 0, maxCombo: 1, drafts: 0 };
   startedAt = performance.now();
   endedAt = 0;
@@ -171,18 +176,19 @@ export class Raid {
 
   /**
    * Hits the next horde email, or the one with `id` (the triage board lets the player pick
-   * any card in the queue: it is moved to the front first, so undo brings it back there).
+   * any card in the queue). It is moved to the front for the hit; the snapshot keeps the
+   * original order so undo can put every card back exactly where it was.
    */
   hitMail(move: HordeMove, id?: string): Hit | null {
     if (this.phase !== 'horde') return null;
-    if (id) {
-      const at = this.horde.findIndex((m, i) => i >= this.hordeIdx && m.id === id);
-      if (at < 0) return null;
-      if (at > this.hordeIdx) this.horde.splice(this.hordeIdx, 0, ...this.horde.splice(at, 1));
-    }
+    const at = id
+      ? this.horde.findIndex((m, i) => i >= this.hordeIdx && m.id === id)
+      : this.hordeIdx;
+    if (at < this.hordeIdx || at >= this.horde.length) return null;
+    const snap = this.snapshot(null);
+    if (at > this.hordeIdx) this.horde.splice(this.hordeIdx, 0, ...this.horde.splice(at, 1));
     const mail = this.mail;
     if (!mail) return null;
-    const snap = this.snapshot(null);
     const combo = this.bumpCombo(this.hordeComboWindowMs);
     const points = (move === 'star' ? 50 : 100) * combo;
     if (move === 'archive') this.stats.archived++;
@@ -200,14 +206,23 @@ export class Raid {
     return hit;
   }
 
-  /**
-   * Points for a reply draft. They stay through undo: the draft is in Gmail no matter
-   * what happens to the hits before it.
-   */
-  bonus(points: number) {
+  hasDraft(id: string): boolean { return this.draftedIds.has(id); }
+
+  /** Rewards a successfully created draft exactly once per message and per raid. */
+  rewardDraft(id: string, points: number): boolean {
+    if (this.draftedIds.has(id)) return false;
+    this.draftedIds.add(id);
     this.score += points;
     this.stats.drafts++;
     for (const s of this.history) { s.score += points; s.stats.drafts++; }
+    return true;
+  }
+
+  /** Badges are run memories: undoing a hit does not erase an achievement already seen. */
+  unlockBadge(id: BadgeId): boolean {
+    if (this.badges.has(id)) return false;
+    this.badges.add(id);
+    return true;
   }
 
   /** Time the game stood still (reading a briefing) counts for nothing: no clock, combo or stress. */
@@ -230,6 +245,7 @@ export class Raid {
     this.stats = s.stats;
     this.quests.length = s.quests;
     this.lastActionAt = s.lastActionAt;
+    this.horde.splice(0, this.horde.length, ...s.horde);
     if (s.hit.boss && s.bossStatus) s.hit.boss.status = s.bossStatus;
     this.endedAt = 0;
     this.idleSince = performance.now();
@@ -275,7 +291,7 @@ export class Raid {
     return {
       phase: this.phase, bossIdx: this.bossIdx, hordeIdx: this.hordeIdx, inboxLeft: this.inboxLeft,
       score: this.score, combo: this.combo, stress: this.stress, stats: { ...this.stats },
-      quests: this.quests.length, bossStatus, lastActionAt: this.lastActionAt,
+      quests: this.quests.length, bossStatus, lastActionAt: this.lastActionAt, horde: [...this.horde],
     };
   }
 }

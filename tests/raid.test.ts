@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildDemoInbox } from '../src/demoInbox';
+import { buildDemoInbox, demoBossTaunt } from '../src/demoInbox';
 import { Raid, splitInbox } from '../src/raid';
 import type { Mail } from '../src/types';
 
@@ -15,6 +15,15 @@ describe('splitInbox', () => {
     expect(horde).toHaveLength(7);
     expect(horde[0].fromEmail).toBe('invoice@totally-legit.example');
     expect(overflow).toBe(0);
+  });
+
+  it('gives every quick-demo boss a bilingual authored taunt', () => {
+    const { bosses } = splitInbox(buildDemoInbox(1_800_000, 'blitz'));
+    for (const boss of bosses) {
+      expect(demoBossTaunt(boss.email, 'en')).not.toBe('');
+      expect(demoBossTaunt(boss.email, 'pt')).not.toBe('');
+    }
+    expect(demoBossTaunt('real@gmail.com', 'pt')).toBe('');
   });
   it('turns senders with 3+ emails into bosses, biggest first', () => {
     const mails = [
@@ -119,7 +128,7 @@ describe('Raid.unsubFailed', () => {
 });
 
 describe('Raid triage board', () => {
-  it('hits any card in the queue; undo puts it back at the front', () => {
+  it('hits any card in the queue; undo restores its exact position', () => {
     const a = mail('a@x.com'), b = mail('b@x.com'), c = mail('c@x.com');
     const r = new Raid([], [a, b, c]);
     const hit = r.hitMail('trash', c.id)!;
@@ -127,7 +136,8 @@ describe('Raid triage board', () => {
     expect(r.mail).toBe(a);
     expect(r.horde.slice(r.hordeIdx)).toEqual([a, b]);
     r.undo();
-    expect(r.mail).toBe(c);
+    expect(r.mail).toBe(a);
+    expect(r.horde).toEqual([a, b, c]);
     expect(r.inboxLeft).toBe(3);
   });
 
@@ -144,10 +154,19 @@ describe('Raid triage board', () => {
     const r = new Raid([], [a, b]);
     r.hitMail('star', a.id);
     const before = r.score;
-    r.bonus(300);
+    expect(r.rewardDraft(a.id, 300)).toBe(true);
+    expect(r.rewardDraft(a.id, 300)).toBe(false);
     expect(r.score).toBe(before + 300);
     r.undo();
     expect(r.score).toBe(300);
     expect(r.stats.drafts).toBe(1);
+    expect(r.hasDraft(a.id)).toBe(true);
+  });
+
+  it('unlocks each arcade badge only once', () => {
+    const r = new Raid([], [mail('a@x.com')]);
+    expect(r.unlockBadge('critical')).toBe(true);
+    expect(r.unlockBadge('critical')).toBe(false);
+    expect([...r.badges]).toEqual(['critical']);
   });
 });

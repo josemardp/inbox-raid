@@ -83,6 +83,12 @@ canvas.monster.big, canvas.monster.hero { width: min(46cqmin, 240px); height: au
 canvas.monster.parade { width: 40px; height: auto; animation: bob .5s steps(2) infinite alternate; }
 canvas.monster.parade:nth-child(2n) { animation-delay: -.25s; }
 .boss-sprite, .card-sprite { transition: transform .15s, opacity .15s; }
+.boss-taunt {
+  position: relative; margin: -4px 0 0; max-width: 30ch; padding: 9px 12px; background: white; color: var(--ink);
+  font: 700 13px/1.3 var(--display); text-align: left; filter: drop-shadow(5px 5px 0 var(--blue));
+  animation: taunt-in .28s cubic-bezier(.16, 1, .3, 1) both;
+}
+.boss-taunt::before { content: ''; position: absolute; left: 24px; top: -9px; border: 10px solid transparent; border-bottom-color: white; border-top: 0; }
 .boss-sprite.hurt { animation: hurt .12s steps(2) infinite; }
 .boss-sprite.dead, .card-sprite.dead { transform: scale(1.5); opacity: 0; }
 .boss-sprite.walk-off { transform: translateX(120%); opacity: .3; transition: transform .45s ease-in, opacity .45s; }
@@ -195,6 +201,9 @@ canvas.monster.parade:nth-child(2n) { animation-delay: -.25s; }
 .stats dd { margin: 0; font: 700 clamp(22px, 2.2vw, 30px)/1 var(--display); font-variant-numeric: tabular-nums; }
 .stats div.hot dd { color: var(--blue); }
 .quests { display: grid; gap: 6px; }
+.badges { display: grid; gap: 6px; }
+.badges ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.badges li { padding: 5px 8px; background: #ffd35c; color: var(--ink); font: 700 10px var(--mono); letter-spacing: .04em; }
 .quests ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font: 400 13px var(--mono); }
 .quests li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .quests li b { font-weight: 500; }
@@ -251,6 +260,15 @@ canvas.monster.parade:nth-child(2n) { animation-delay: -.25s; }
   clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
   animation: stamp .95s cubic-bezier(.16, 1, .3, 1) forwards;
 }
+.badge-pop {
+  position: fixed; right: 22px; top: 96px; z-index: 32; pointer-events: none; max-width: min(390px, calc(100vw - 32px));
+  display: flex; align-items: center; gap: 11px; padding: 11px 16px 11px 12px; color: var(--ink); background: #ffd35c;
+  border: 3px solid white; box-shadow: 6px 6px 0 var(--blue); font: 700 14px/1.25 var(--display); text-transform: uppercase;
+  animation: badge-pop 2.4s cubic-bezier(.16, 1, .3, 1) forwards;
+}
+.badge-pop b { display: grid; place-items: center; width: 30px; height: 30px; flex: none; background: var(--navy); color: #ffd35c; }
+body.hit-stop #stage { filter: contrast(1.25) brightness(1.12); }
+body.hit-stop #stage * { animation-play-state: paused !important; }
 .flash { position: fixed; inset: 0; z-index: 24; pointer-events: none; animation: flash .3s ease-out forwards; }
 #toast {
   position: fixed; left: 50%; bottom: 24px; z-index: 40; max-width: calc(100vw - 32px);
@@ -265,6 +283,8 @@ canvas.monster.parade:nth-child(2n) { animation-delay: -.25s; }
 @keyframes pulse { to { transform: scale(1.12); } }
 @keyframes coach-pulse { to { filter: brightness(1.22); } }
 @keyframes coach-card { to { transform: translateX(5px); } }
+@keyframes taunt-in { from { transform: translateY(10px) scale(.92); opacity: 0; } }
+@keyframes badge-pop { 0% { transform: translateX(120%); } 10%, 82% { transform: translateX(0); } 100% { transform: translateX(120%); } }
 @keyframes bob { to { transform: translateY(-5px); } }
 @keyframes hurt { 50% { filter: brightness(2.4); transform: translateX(6px); } }
 @keyframes float-up { to { transform: translate(-50%, -140%); opacity: 0; } }
@@ -284,10 +304,12 @@ canvas.monster.parade:nth-child(2n) { animation-delay: -.25s; }
 @media (prefers-reduced-motion: reduce) {
   .blink, .mini.alert, .gear.max strong, canvas.monster.parade, .btn.coach, .zone.coach, .mini-card.coach-card { animation: none !important; }
   .stamp { animation: stamp-still 1.2s steps(1) forwards !important; transform: translate(-50%, -50%) rotate(-4deg); }
+  .badge-pop { animation: badge-pop-still 2.4s steps(1) forwards !important; }
   .card { transition: opacity .2s; }
   .card.fly-archive, .card.fly-trash, .card.fly-star { transform: none; }
 }
 @keyframes stamp-still { 0% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes badge-pop-still { 0%, 90% { opacity: 1; } 100% { opacity: 0; } }
 
 /* ---------- short laptop screens (1280x720 and similar) ---------- */
 @media (max-height: 760px) and (min-width: 701px) {
@@ -300,6 +322,26 @@ canvas.monster.parade:nth-child(2n) { animation-delay: -.25s; }
   .dial { width: 132px; }
   .gear strong { font-size: 34px; }
   .how { gap: 6px; font-size: 14px; }
+  .brief.boss { padding: 16px 24px 14px; gap: 6px; }
+  .brief.boss .boss-name { font-size: 34px; }
+  .brief.boss .email { font-size: 12px; }
+  .brief.boss .segbar { height: 14px; }
+  .brief.boss .attacks { gap: 3px; }
+  .brief.boss .attacks li { font-size: 11px; }
+  .brief.boss .critical { padding: 7px 10px; font-size: 11px; }
+  .brief.boss .critical::before { width: 22px; height: 22px; }
+  .brief.boss .coach-note { padding: 6px 8px; font-size: 11px; }
+  .brief.report { padding: 14px 20px 12px; gap: 7px; }
+  .report .stats { gap: 5px; }
+  .report .stats div { padding: 7px 9px; }
+  .report .stats dt { margin-bottom: 4px; font-size: 8px; }
+  .report .stats dd { font-size: 20px; }
+  .report .badges, .report .quests { gap: 3px; }
+  .report .badges li { padding: 3px 6px; font-size: 9px; }
+  .report .quests ul { gap: 2px; font-size: 11px; }
+  .report .quests .drafts.dim { display: none; }
+  .report .drafts { font-size: 10px; }
+  .report .proof { font-size: 12px; }
 }
 
 /* ---------- phones ---------- */
@@ -528,7 +570,9 @@ body.dragging .zone { filter: brightness(1.06); }
 .quest-item { all: unset; box-sizing: border-box; display: block; width: 100%; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 2px 0; }
 .quest-item:hover { color: var(--blue); }
 .quest-item:focus-visible { outline: 2px solid var(--cyan); }
+.quest-item.drafted { color: var(--blue); }
 .drafts { margin: 0; font: 500 12px var(--mono); color: var(--blue); }
+.brief-note { margin: 0; padding: 9px 12px; background: var(--tile); color: var(--muted); font: 500 12px/1.4 var(--mono); }
 
 @media (prefers-reduced-motion: reduce) {
   .mini-card.enter, .zone.gulp, .overlay, .mission { animation: none !important; }
@@ -571,9 +615,15 @@ body.dragging .zone { filter: brightness(1.06); }
   .mission-text, .mission-side { grid-column: 1; overflow: visible; }
   .mission-text { max-height: 34dvh; overflow: auto; }
   .brief-row { grid-template-columns: 1fr 1fr; }
+  .core:has(.boss-taunt) { gap: 5px; }
+  .core:has(.boss-taunt) canvas.monster.big { width: min(36cqmin, 105px); }
+  .boss-taunt { max-width: 31ch; padding: 6px 8px; font-size: 10px; filter: drop-shadow(3px 3px 0 var(--blue)); }
+  .badge-pop { top: 68px; right: 8px; font-size: 11px; }
 }
 @media (max-width: 700px) and (max-height: 700px) {
   #arena.fight.board { grid-template-rows: auto 92px auto; }
   .style-opt span { display: none; }
+  .core:has(.boss-taunt) canvas.monster.big { width: min(30cqmin, 76px); }
+  .boss-taunt { font-size: 9px; }
 }
 .drafts.dim { color: var(--muted); }

@@ -82,6 +82,24 @@ export function stamp(text: string, color: string) {
   el.addEventListener('animationend', () => el.remove());
 }
 
+/** A compact achievement banner that does not cover the current email or action buttons. */
+export function awardBadge(text: string) {
+  const el = document.createElement('div');
+  el.className = 'badge-pop';
+  el.innerHTML = '<b aria-hidden="true">★</b><span></span>';
+  el.querySelector('span')!.textContent = text;
+  document.body.appendChild(el);
+  el.addEventListener('animationend', () => el.remove());
+}
+
+/** Fighting-game micro pause: freezes motion just before the critical impact lands. */
+export async function hitStop(ms = 45) {
+  if (reduceMotion) return;
+  document.body.classList.add('hit-stop');
+  try { await new Promise((resolve) => setTimeout(resolve, ms)); }
+  finally { document.body.classList.remove('hit-stop'); }
+}
+
 function loop() {
   if (running) return;
   running = true;

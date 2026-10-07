@@ -1,4 +1,5 @@
 import type { Mail } from './types';
+import type { Lang } from './i18n';
 
 // A fake but painfully familiar inbox. All senders are fictional (.example domains).
 
@@ -66,6 +67,38 @@ const BOSSES: BossSeed[] = [
     ],
   },
 ];
+
+const BOSS_TAUNTS: Record<string, Record<Lang, string>> = {
+  'deals@megamart.example': {
+    en: 'You looked at a toaster six months ago. BUY IT NOW.',
+    pt: 'Você olhou uma torradeira há seis meses. COMPRE AGORA.',
+  },
+  'notifications@linkedout.example': {
+    en: 'Brad cried in a board meeting. React to boost his reach.',
+    pt: 'Brad chorou numa reunião. Reaja para aumentar o alcance.',
+  },
+  'hello@dailyhustle.example': {
+    en: 'Sleep is for people without a personal brand.',
+    pt: 'Dormir é para quem não tem marca pessoal.',
+  },
+  'no-reply@cloudbox.example': {
+    en: 'Your storage is 99.9% full. Your panic is 100% free.',
+    pt: 'Seu espaço está 99,9% cheio. O pânico é 100% grátis.',
+  },
+  'yum@pizzapalace.example': {
+    en: 'Your pizza misses you. Your arteries asked for space.',
+    pt: 'Sua pizza sente saudade. Suas artérias pediram espaço.',
+  },
+  'alpha@moonshot.example': {
+    en: 'This coin will 100x. Source: trust me, inbox pilot.',
+    pt: 'Esta moeda vai subir 100x. Fonte: confia, piloto.',
+  },
+};
+
+/** Authored comedy only for fictional demo senders; real Gmail never invents a quote. */
+export function demoBossTaunt(email: string, language: Lang): string {
+  return BOSS_TAUNTS[email.toLowerCase()]?.[language] ?? '';
+}
 
 const HORDE: [string, string, string, string][] = [
   ['Mom', 'mom@family.example', 'Did you eat today?', 'Call me when you can. Also, did you eat today? Real food?'],

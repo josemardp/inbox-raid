@@ -1,5 +1,5 @@
 import { fmt, t } from './i18n';
-import type { Raid } from './raid';
+import type { BadgeId, Raid } from './raid';
 import { colorFor, drawMonster } from './sprites';
 
 // The brag card: a 1200x630 image of the raid result, safe to post anywhere.
@@ -11,6 +11,10 @@ const FONT = '"Space Grotesk", sans-serif';
 const MONO = '"DM Mono", monospace';
 const SITE = 'josemardp.github.io/inbox-raid';
 const C = { void: '#0a1024', navy: '#111d3c', panel: '#eef3fa', ink: '#0d1830', muted: '#5b6884', light: '#c7d2e6', blue: '#1f8bff', cyan: '#5fd3ec', coral: '#ff6e67', tile: '#dce5f2' };
+
+const badgeLabel = (id: BadgeId) => ({
+  critical: t('badge.critical'), combo: t('badge.combo'), zero: t('badge.zero'),
+})[id];
 
 function clock(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -115,6 +119,16 @@ export async function renderShareCard(r: Raid, isDemo: boolean): Promise<HTMLCan
     text(ctx, label, x + 18, y + 36, `500 15px ${MONO}`, C.muted);
     text(ctx, value, x + 18, y + 92, `700 44px ${FONT}`, i === 5 ? C.blue : C.ink);
   });
+  if (r.badges.size) {
+    text(ctx, t('clear.badges'), R.x + 34, R.y + 410, `500 14px ${MONO}`, C.muted);
+    [...r.badges].slice(0, 3).forEach((id, i) => {
+      const x = R.x + 34 + i * 178;
+      ctx.fillStyle = '#ffd35c';
+      ctx.fillRect(x, R.y + 426, 168, 54);
+      text(ctx, '★', x + 12, R.y + 461, `700 22px ${FONT}`, C.ink);
+      text(ctx, badgeLabel(id), x + 42, R.y + 458, `700 11px ${MONO}`, C.ink);
+    });
+  }
   text(ctx, SITE, R.x + 34, R.y + R.h - 34, `500 18px ${MONO}`, C.blue);
   return c;
 }

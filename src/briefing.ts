@@ -24,6 +24,8 @@ export interface BriefOptions {
   privacy: boolean;
   /** Mid-raid the briefing also decides the card's fate; after the raid it only writes drafts. */
   inRaid: boolean;
+  /** This message already has a draft from the current raid; never create a duplicate. */
+  drafted?: boolean;
   /** First-run demo coach: points at the rule-based recommendation without blocking choices. */
   coach?: boolean;
   toast: (text: string, ms?: number) => void;
@@ -84,26 +86,27 @@ export function openBriefing(o: BriefOptions): Promise<BriefResult> {
       if (!b) return 'back';
       if (b.kind === 'scam') return o.inRaid ? 'trash' : 'back';
       if (b.kind === 'info') return o.inRaid ? 'archive' : 'back';
-      if (b.replies.length) return 'draft';
+      if (b.replies.length && !o.drafted) return 'draft';
       return o.inRaid ? 'star' : 'back';
     };
 
     const renderActions = () => {
       const rec = recommended();
-      const btn = (key: string, label: string, action: string, cls = '') =>
-        `<button class="btn ${cls} ${rec === action ? `primary rec ${o.coach ? 'coach' : ''}` : ''}" data-brief="${action}"><kbd>${key}</kbd><span>${label}${rec === action ? ` <small>${t('brief.suggested')}</small>` : ''}</span></button>`;
+      const btn = (key: string, label: string, action: string, cls = '', disabled = false) =>
+        `<button class="btn ${cls} ${rec === action ? `primary rec ${o.coach ? 'coach' : ''}` : ''}" data-brief="${action}" ${disabled ? 'disabled' : ''}><kbd>${key}</kbd><span>${label}${rec === action ? ` <small>${t('brief.suggested')}</small>` : ''}</span></button>`;
       const canDraft = !!b?.replies.length;
       const canCal = b?.kind === 'meeting' || b?.kind === 'confirm';
       root.querySelector('.mission-actions')!.innerHTML = `
         ${o.coach && b ? `<p class="coach-note">${t('tutorial.brief')}</p>` : ''}
         <div class="row brief-row">
-          ${canDraft ? btn('S', o.inRaid ? t('brief.draftQuest') : t('brief.draft'), 'draft') : ''}
+          ${canDraft ? btn('S', o.drafted ? t('brief.draftSaved') : o.inRaid ? t('brief.draftQuest') : t('brief.draft'), 'draft', '', !!o.drafted) : ''}
           ${o.inRaid ? btn('&rarr;', `${t('brief.quest')} &#9733;`, 'star', 'quest') : ''}
           ${o.inRaid ? btn('&larr;', t('brief.archive'), 'archive') : ''}
           ${o.inRaid ? btn('&darr;', t('brief.trash'), 'trash', 'danger') : ''}
           ${canCal ? btn('C', t('brief.calendar'), 'calendar', 'ghost') : ''}
           ${btn('ESC', t('brief.back'), 'back', 'ghost')}
         </div>
+        ${!o.inRaid && b && !b.replies.length ? `<p class="brief-note">${t('brief.noReply')}</p>` : ''}
         <p class="fine">${o.source.isDemo ? `${t('brief.demo')} ` : ''}${t('brief.never')}</p>`;
     };
 
@@ -148,7 +151,7 @@ export function openBriefing(o: BriefOptions): Promise<BriefResult> {
 
     const saveDraft = async () => {
       const ta = textarea();
-      if (!b || !body || !ta || working || !ta.value.trim()) return;
+      if (!b || !body || !ta || working || o.drafted || !ta.value.trim()) return;
       working = true;
       root.classList.add('working');
       try {

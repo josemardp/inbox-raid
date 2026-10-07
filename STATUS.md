@@ -1,8 +1,19 @@
 # STATUS: INBOX RAID
 
-Atualizado: 07/10/2026, ~14:50 (quarta, dia 3 do Hackyard).
-**Onde paramos:** candidato da entrega final pronto para publicação. Speedrun entregue em 07/10 ~13:23; vídeo público: https://youtu.be/3pmce3kaHck.
+Atualizado: 07/10/2026, fim da tarde (quarta, dia 3 do Hackyard).
+**Onde paramos:** candidato final refinado, com personalidade e medalhas na Demo e correções de segurança na triagem. Speedrun entregue em 07/10 ~13:23; vídeo público: https://youtu.be/3pmce3kaHck.
 **Para retomar:** conferir o deploy do Pages e decidir se reenvia a entrega final; reenviar substitui a atual.
+
+## Refinamento final para o voto (07/10, fim da tarde)
+- **Chefões com personalidade:** os seis remetentes fictícios da Demo ganharam provocações autorais em português e inglês. Nenhuma fala é inventada para remetentes do Gmail real.
+- **Medalhas arcade:** Faxina Crítica, Velocidade Máxima e Caixa Zero aparecem durante a partida, no relatório e no cartão PNG compartilhável.
+- **Mais impacto:** o golpe de descadastro ganhou uma micro-pausa de 45 ms antes da explosão, desativada quando `prefers-reduced-motion` está ativo.
+- **Rascunhos seguros:** a mesma missão não cria nem pontua um segundo rascunho na partida; a tela final marca o que já foi salvo e diferencia claramente rascunho fictício da Demo.
+- **Desfazer fiel:** escolher um minicartão fora de ordem e desfazer agora restaura a posição exata da fila.
+- **Atalhos consistentes:** `S` continua significando poupar nos chefões e deixou de arquivar/estrelar silenciosamente na horda.
+- **Briefing pós-raid:** mensagens informativas explicam que não precisam de resposta, em vez de parecer uma tela sem ação.
+- **Validado:** 49 testes, `npm run build`, `git diff --check`, partidas na Demo Rápida em Mesa e Clássico, PT/EN, 1280x720 e fluxo móvel responsivo. Cartão PNG conferido em 1200x630.
+- Sem servidor, sem escopo OAuth novo e sem mudar as garantias de desfazer/nunca enviar e-mail.
 
 ## Candidato final do Hackyard (07/10 ~14:50)
 - **Demo Rápida · 45s:** 245 e-mails, dois chefões (142 + 96) e sete decisões com ordem narrativa; a Raid Completa continua disponível.

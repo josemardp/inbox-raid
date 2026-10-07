@@ -14,11 +14,12 @@ import { briefingOpen, openBriefing } from './briefing';
 import { isPerson } from './classifier';
 import { makeDial } from './dials';
 import { esc, redact } from './html';
+import { demoBossTaunt } from './demoInbox';
 import { DemoSource } from './demoSource';
 import { GmailSource, preloadGoogle, signIn } from './gmailSource';
-import { burst, centreOf, flash, floatText, initFx, settleParticles, shake, stamp } from './fx';
+import { awardBadge, burst, centreOf, flash, floatText, hitStop, initFx, settleParticles, shake, stamp } from './fx';
 import { fmt, lang, setLang, t } from './i18n';
-import { Raid, splitInbox, type BossMove, type Hit, type HordeMove } from './raid';
+import { Raid, splitInbox, type BadgeId, type BossMove, type Hit, type HordeMove } from './raid';
 import { recKeepGoing, recStart, recStopSoon } from './recorder';
 import { renderShareCard, shareCard } from './shareCard';
 import { colorFor, drawMonster, PALETTE } from './sprites';
@@ -59,6 +60,16 @@ const CYAN = '#75dbf3';
 const BLUE = '#4aa3ff';
 const CORAL = '#ff6e67';
 const WHITE = '#f2f7fd';
+
+function badgeText(id: BadgeId): string {
+  return { critical: t('badge.critical'), combo: t('badge.combo'), zero: t('badge.zero') }[id];
+}
+
+function earnBadge(id: BadgeId) {
+  if (!raid?.unlockBadge(id)) return;
+  sfx('coin');
+  awardBadge(`${t('badge.unlocked')} · ${badgeText(id)}`);
+}
 
 // ---------- helpers ----------
 
@@ -401,6 +412,7 @@ function showBoss() {
   const samples = [...new Set(boss.mails.map((m) => m.subject))].slice(0, 3);
   const plan = unsubPlan(boss.mails.find((m) => m.listUnsubscribe));
   const person = boss.mails.some(isPerson);
+  const taunt = source.isDemo ? demoBossTaunt(boss.email, lang) : '';
   const tag = {
     'one-click': t('boss.tag.oneclick'),
     mailto: t('boss.tag.mailto', { to: who(mailtoAddress(plan.url), person) }),
@@ -408,7 +420,7 @@ function showBoss() {
     none: t('boss.tag.none'),
   }[plan.kind];
   screen.innerHTML = `
-    ${orbit(`<div class="boss-sprite">${monster(boss.key, 'big', color)}</div>`, `${t('boss.label')} <b>${r.bossIdx + 1} / ${r.bosses.length}</b>`)}
+    ${orbit(`<div class="boss-sprite">${monster(boss.key, 'big', color)}</div>${taunt ? `<p class="boss-taunt">${esc(taunt)}</p>` : ''}`, `${t('boss.label')} <b>${r.bossIdx + 1} / ${r.bosses.length}</b>`)}
     <section class="panel brief boss">
       <p class="eyebrow">${person ? t('boss.person') : t('boss.bulk')}</p>
       <h1 class="boss-name">${who(boss.name, person)}</h1>
@@ -470,6 +482,7 @@ async function bossMove(move: BossMove) {
   const [x, y] = centreOf(sprite);
   const color = colorFor(boss.key);
   const hit = r.hitBoss(move)!;
+  const crit = move === 'unsubscribe';
   updateHud();
 
   if (move === 'spare') {
@@ -487,8 +500,9 @@ async function bossMove(move: BossMove) {
     tweenInbox(r.inboxLeft, drainMs);
     await wait(drainMs);
     if (run !== runId) return;
+    if (crit) await hitStop();
+    if (run !== runId) return;
     sprite.classList.add('dead');
-    const crit = move === 'unsubscribe';
     sfx(crit ? 'boom' : move === 'trash' ? 'trash' : 'hit');
     burst(x, y, crit ? BLUE : color, crit ? 72 : 50, crit ? 11 : 8, crit ? 9 : 7);
     burst(x, y, WHITE, crit ? 16 : 20, 5, 4);
@@ -503,9 +517,10 @@ async function bossMove(move: BossMove) {
     await wait(crit ? 700 : 450);
   }
   const t0 = performance.now();
-  await apply(hit, src, run, plan);
+  const applied = await apply(hit, src, run, plan);
   if (run !== runId) return;
   r.waited(performance.now() - t0);
+  if (applied && crit && boss.status === 'unsubscribed') earnBadge('critical');
   busy = false;
   if (r.phase === 'horde' && r.bossIdx === r.bosses.length && r.hordeIdx === 0) {
     settleParticles();
@@ -588,9 +603,10 @@ async function landHit(hit: Hit, comboBefore: number, x: number, y: number, src:
   if ((hit.combo === 5 || hit.combo === 8) && comboBefore < hit.combo) stamp(hit.combo === 8 ? t('fx.combo8') : t('fx.combo5'), CYAN);
   await wait(170);
   const t0 = performance.now();
-  await apply(hit, src, run);
+  const applied = await apply(hit, src, run);
   if (run !== runId) return;
   r.waited(performance.now() - t0);
+  if (applied && hit.combo === 8) earnBadge('combo');
   busy = false;
   next();
 }
@@ -719,7 +735,7 @@ async function openAct(id: string, dragged: boolean) {
   busy = true;
   const t0 = performance.now();
   const coached = tutorialStep === 'brief';
-  const res = await openBriefing({ mail, source, person: isPerson(mail), privacy, inRaid: true, coach: coached, toast });
+  const res = await openBriefing({ mail, source, person: isPerson(mail), privacy, inRaid: true, coach: coached, drafted: r.hasDraft(mail.id), toast });
   if (run !== runId || raid !== r) return;
   r.paused(performance.now() - t0);
   busy = false;
@@ -735,8 +751,7 @@ async function openAct(id: string, dragged: boolean) {
   if (!res.move) return showBoard();
   if (res.drafted) {
     // Before the hit, so undoing the hit keeps the points: the draft stays in Gmail.
-    r.bonus(DRAFT_POINTS);
-    stamp(t('fx.mission'), CYAN);
+    if (r.rewardDraft(id, DRAFT_POINTS)) stamp(t('fx.mission'), CYAN);
   }
   boardMove(res.move, id, dragged && res.move === 'star');
 }
@@ -748,16 +763,17 @@ async function briefQuest(id: string) {
   if (!mail || busy) return;
   const run = runId;
   busy = true;
-  const res = await openBriefing({ mail, source, person: isPerson(mail), privacy, inRaid: false, toast });
+  const res = await openBriefing({ mail, source, person: isPerson(mail), privacy, inRaid: false, drafted: r.hasDraft(mail.id), toast });
   if (run !== runId || raid !== r) return;
   busy = false;
   if (res.authExpired) { needsAuth = true; toast(t('toast.expired'), 4000); }
   if (res.drafted) {
-    r.bonus(DRAFT_POINTS);
-    if (r.score > readBest()) writeBest(r.score);
-    sfx('coin');
-    stamp(t('fx.mission'), CYAN);
-    updateHud();
+    if (r.rewardDraft(id, DRAFT_POINTS)) {
+      if (r.score > readBest()) writeBest(r.score);
+      sfx('coin');
+      stamp(t('fx.mission'), CYAN);
+      updateHud();
+    }
   }
   renderClear();
 }
@@ -766,6 +782,7 @@ function showClear() {
   const r = raid!;
   layout('clear');
   music.stop();
+  if (source.isDemo && r.inboxLeft === 0) earnBadge('zero');
   fanfare();
   recStopSoon();
   // Leftover stamps and score pops must not cover the result.
@@ -786,9 +803,12 @@ async function checkInbox(r: Raid, run: number) {
     await wait(1500); // let Gmail settle the last move first
     if (run !== runId || view !== 'clear') return;
     const real = await source.countInbox!();
-    if (run !== runId || view !== 'clear' || raid !== r || real === r.inboxLeft) return;
-    r.inboxLeft = real;
-    shownInbox = real;
+    if (run !== runId || view !== 'clear' || raid !== r) return;
+    if (real !== r.inboxLeft) {
+      r.inboxLeft = real;
+      shownInbox = real;
+    }
+    if (real === 0) earnBadge('zero');
     renderClear();
   } catch (err) {
     console.warn('Could not recount the inbox', err);
@@ -819,10 +839,11 @@ function renderClear() {
         ${stat(t('clear.time'), clock(r.elapsedMs))}
         ${stat(t('clear.score'), fmt(r.score), true)}
       </dl>
+      ${r.badges.size ? `<div class="badges"><p class="hp-label">${t('clear.badges')}</p><ul>${[...r.badges].map((id) => `<li>★ ${badgeText(id)}</li>`).join('')}</ul></div>` : ''}
       ${r.quests.length ? `
         <div class="quests"><p class="hp-label">${t('clear.quests')}</p>
-        ${r.stats.drafts ? `<p class="drafts">&#10022; ${t('clear.drafts', { n: r.stats.drafts })}</p>` : ''}
-        <ul>${r.quests.slice(0, QUESTS_SHOWN).map((m) => `<li><button class="quest-item" data-brief-id="${esc(m.id)}" title="${t('clear.openBrief')}">&#9733; <b>${who(m.fromName, true)}</b> ${what(m.subject)}</button></li>`).join('')}
+        ${r.stats.drafts ? `<p class="drafts">&#10022; ${source.isDemo ? t('clear.draftsDemo', { n: r.stats.drafts }) : t('clear.drafts', { n: r.stats.drafts })}</p>` : ''}
+        <ul>${r.quests.slice(0, QUESTS_SHOWN).map((m) => `<li><button class="quest-item ${r.hasDraft(m.id) ? 'drafted' : ''}" data-brief-id="${esc(m.id)}" title="${r.hasDraft(m.id) ? t('brief.draftSaved') : t('clear.openBrief')}">${r.hasDraft(m.id) ? '&#10003;' : '&#9733;'} <b>${who(m.fromName, true)}</b> ${what(m.subject)}</button></li>`).join('')}
         ${r.quests.length > QUESTS_SHOWN ? `<li class="dim">${t('clear.more', { n: r.quests.length - QUESTS_SHOWN })}</li>` : ''}</ul>
         <p class="drafts dim">&#9656; ${t('clear.openBrief')}</p></div>` : ''}
       <p class="proof">${source.isDemo
@@ -848,7 +869,7 @@ function renderClear() {
 // ---------- applying to the inbox ----------
 
 /** Applies a hit to the inbox it came from. On failure the game rolls back. */
-async function apply(hit: Hit, src: InboxSource, run: number, plan?: UnsubPlan) {
+async function apply(hit: Hit, src: InboxSource, run: number, plan?: UnsubPlan): Promise<boolean> {
   try {
     if (hit.kind === 'archive') await src.archive(hit.ids);
     else if (hit.kind === 'trash') await src.trash(hit.ids);
@@ -869,9 +890,10 @@ async function apply(hit: Hit, src: InboxSource, run: number, plan?: UnsubPlan) 
       }
       await src.archive(hit.ids);
     }
+    return true;
   } catch (err) {
     console.error(err);
-    if (run !== runId) return;
+    if (run !== runId) return false;
     raid?.undo();
     tweenInbox(raid?.inboxLeft ?? 0, 300);
     updateHud();
@@ -881,6 +903,7 @@ async function apply(hit: Hit, src: InboxSource, run: number, plan?: UnsubPlan) 
     } else {
       toast(t('toast.rolledBack'), 3000);
     }
+    return false;
   }
 }
 
@@ -1069,7 +1092,7 @@ async function reconnect() {
 const KEYS: Record<string, Record<string, string>> = {
   title: { Enter: 'demo', ' ': 'demo', f: 'demo-full', g: 'gmail', p: 'privacy', t: 'style' },
   boss: { a: 'archive', u: 'unsubscribe', d: 'trash', s: 'spare', ArrowLeft: 'archive', ArrowDown: 'trash', Escape: 'quit', g: 'reauth', p: 'privacy' },
-  horde: { ArrowLeft: 'archive', a: 'archive', ArrowDown: 'trash', d: 'trash', ArrowRight: 'star', s: 'star', ArrowUp: 'next', Escape: 'quit', g: 'reauth', p: 'privacy' },
+  horde: { ArrowLeft: 'archive', a: 'archive', ArrowDown: 'trash', d: 'trash', ArrowRight: 'star', ArrowUp: 'next', Escape: 'quit', g: 'reauth', p: 'privacy' },
   scan: { Escape: 'quit' },
   clear: { r: 'again', Enter: 'again', Escape: 'title', c: 'card', g: 'reauth', p: 'privacy' },
 };
