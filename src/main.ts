@@ -448,6 +448,7 @@ async function hordeMove(move: HordeMove) {
   busy = true;
   const el = $('.card.live');
   const [x, y] = centreOf(el);
+  const comboBefore = r.combo;
   const hit = r.hitMail(move)!;
   updateHud();
   tweenInbox(r.inboxLeft, 250);
@@ -458,7 +459,8 @@ async function hordeMove(move: HordeMove) {
   if (hit.combo > 1) comboSfx(hit.combo);
   shake(3 + hit.combo, 150);
   floatText(x, y - 30, `+${fmt(hit.points)}${hit.combo > 1 ? ` x${hit.combo}` : ''}`, '#ffd23f', 16 + hit.combo);
-  if (hit.combo === 5 || hit.combo === 8) stamp(hit.combo === 8 ? 'MAX COMBO!' : 'COMBO x5!', '#3cff7a');
+  // Stamped once on the way up, not on every card while the combo stays maxed.
+  if ((hit.combo === 5 || hit.combo === 8) && comboBefore < hit.combo) stamp(hit.combo === 8 ? 'MAX COMBO!' : 'COMBO x5!', '#3cff7a');
   await wait(170);
   const t0 = performance.now();
   await apply(hit, src, run);
