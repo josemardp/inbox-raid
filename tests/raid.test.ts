@@ -169,4 +169,15 @@ describe('Raid triage board', () => {
     expect(r.unlockBadge('critical')).toBe(false);
     expect([...r.badges]).toEqual(['critical']);
   });
+
+  it('shows the INBOX ZERO badge only while the inbox really is at zero', () => {
+    const r = new Raid([], [mail('a@x.com')]);
+    r.hitMail('archive');
+    expect(r.inboxLeft).toBe(0);
+    r.unlockBadge('zero');
+    r.unlockBadge('critical');
+    expect(r.shownBadges).toEqual(['zero', 'critical']);
+    r.inboxLeft = 1; // a new email arrived, the recount says so
+    expect(r.shownBadges).toEqual(['critical']);
+  });
 });

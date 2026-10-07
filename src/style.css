@@ -12,6 +12,8 @@
   --coral: oklch(68% .2 28);
   --line: oklch(84% .025 246);
   --tile: oklch(91% .018 242);
+  /* Reward colour: arcade medals only. */
+  --gold: #ffd35c;
   --display: 'Space Grotesk', system-ui, sans-serif;
   --mono: 'DM Mono', ui-monospace, monospace;
   --cut: 18px;
@@ -203,7 +205,7 @@ canvas.monster.parade:nth-child(2n) { animation-delay: -.25s; }
 .quests { display: grid; gap: 6px; }
 .badges { display: grid; gap: 6px; }
 .badges ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.badges li { padding: 5px 8px; background: #ffd35c; color: var(--ink); font: 700 10px var(--mono); letter-spacing: .04em; }
+.badges li { padding: 5px 8px; background: var(--gold); color: var(--ink); font: 700 10px var(--mono); letter-spacing: .04em; }
 .quests ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font: 400 13px var(--mono); }
 .quests li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .quests li b { font-weight: 500; }
@@ -262,11 +264,11 @@ canvas.monster.parade:nth-child(2n) { animation-delay: -.25s; }
 }
 .badge-pop {
   position: fixed; right: 22px; top: 96px; z-index: 32; pointer-events: none; max-width: min(390px, calc(100vw - 32px));
-  display: flex; align-items: center; gap: 11px; padding: 11px 16px 11px 12px; color: var(--ink); background: #ffd35c;
+  display: flex; align-items: center; gap: 11px; padding: 11px 16px 11px 12px; color: var(--ink); background: var(--gold);
   border: 3px solid white; box-shadow: 6px 6px 0 var(--blue); font: 700 14px/1.25 var(--display); text-transform: uppercase;
   animation: badge-pop 2.4s cubic-bezier(.16, 1, .3, 1) forwards;
 }
-.badge-pop b { display: grid; place-items: center; width: 30px; height: 30px; flex: none; background: var(--navy); color: #ffd35c; }
+.badge-pop b { display: grid; place-items: center; width: 30px; height: 30px; flex: none; background: var(--navy); color: var(--gold); }
 body.hit-stop #stage { filter: contrast(1.25) brightness(1.12); }
 body.hit-stop #stage * { animation-play-state: paused !important; }
 .flash { position: fixed; inset: 0; z-index: 24; pointer-events: none; animation: flash .3s ease-out forwards; }
@@ -334,10 +336,10 @@ body.hit-stop #stage * { animation-play-state: paused !important; }
   .brief.report { padding: 14px 20px 12px; gap: 7px; }
   .report .stats { gap: 5px; }
   .report .stats div { padding: 7px 9px; }
-  .report .stats dt { margin-bottom: 4px; font-size: 8px; }
+  .report .stats dt { margin-bottom: 4px; font-size: 10px; }
   .report .stats dd { font-size: 20px; }
   .report .badges, .report .quests { gap: 3px; }
-  .report .badges li { padding: 3px 6px; font-size: 9px; }
+  .report .badges li { padding: 3px 6px; font-size: 10px; }
   .report .quests ul { gap: 2px; font-size: 11px; }
   .report .quests .drafts.dim { display: none; }
   .report .drafts { font-size: 10px; }

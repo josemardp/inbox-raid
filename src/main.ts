@@ -839,7 +839,7 @@ function renderClear() {
         ${stat(t('clear.time'), clock(r.elapsedMs))}
         ${stat(t('clear.score'), fmt(r.score), true)}
       </dl>
-      ${r.badges.size ? `<div class="badges"><p class="hp-label">${t('clear.badges')}</p><ul>${[...r.badges].map((id) => `<li>★ ${badgeText(id)}</li>`).join('')}</ul></div>` : ''}
+      ${r.shownBadges.length ? `<div class="badges"><p class="hp-label">${t('clear.badges')}</p><ul>${r.shownBadges.map((id) => `<li>★ ${badgeText(id)}</li>`).join('')}</ul></div>` : ''}
       ${r.quests.length ? `
         <div class="quests"><p class="hp-label">${t('clear.quests')}</p>
         ${r.stats.drafts ? `<p class="drafts">&#10022; ${source.isDemo ? t('clear.draftsDemo', { n: r.stats.drafts }) : t('clear.drafts', { n: r.stats.drafts })}</p>` : ''}

@@ -2,6 +2,7 @@
 
 Atualizado: 07/10/2026, fim da tarde (quarta, dia 3 do Hackyard).
 **Onde paramos:** candidato final refinado, com personalidade e medalhas na Demo e correções de segurança na triagem. Speedrun entregue em 07/10 ~13:23; vídeo público: https://youtu.be/3pmce3kaHck.
+**Auditoria do commit a7777db (Claude, 07/10):** aprovado sem bloqueadores. Corrigido em seguida: a medalha Caixa Zero só aparece (tela final e cartão PNG) enquanto a caixa estiver de fato zerada; letras da tela final em 1280x720 voltaram a no mínimo 10 px; amarelo das medalhas virou o token --gold. Combo x8 é alcançável na Demo Rápida (o combo dos chefões continua na horda).
 **Para retomar:** conferir o deploy do Pages e decidir se reenvia a entrega final; reenviar substitui a atual.
 
 ## Refinamento final para o voto (07/10, fim da tarde)

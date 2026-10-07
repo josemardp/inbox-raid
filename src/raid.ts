@@ -219,6 +219,11 @@ export class Raid {
   }
 
   /** Badges are run memories: undoing a hit does not erase an achievement already seen. */
+  /** Badges to show right now: INBOX ZERO only while the inbox really is at zero. */
+  get shownBadges(): BadgeId[] {
+    return [...this.badges].filter((id) => id !== 'zero' || this.inboxLeft === 0);
+  }
+
   unlockBadge(id: BadgeId): boolean {
     if (this.badges.has(id)) return false;
     this.badges.add(id);
