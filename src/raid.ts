@@ -119,6 +119,19 @@ export class Raid {
   /** Hesitation does not count while the tab is hidden. */
   resetIdle() { this.idleSince = performance.now(); }
 
+  /** Time spent waiting for Gmail is not the player's: it costs no combo and no stress. */
+  waited(ms: number) {
+    this.lastActionAt += ms;
+    this.idleSince += ms;
+  }
+
+  /** The unsubscribe did not go out: that boss counts as archived, not unsubscribed. */
+  unsubFailed(hit: Hit) {
+    if (hit.kind !== 'unsubscribe' || hit.boss?.status !== 'unsubscribed') return;
+    hit.boss.status = 'archived';
+    this.stats.unsubscribed = Math.max(0, this.stats.unsubscribed - 1);
+  }
+
   hitBoss(move: BossMove): Hit | null {
     const boss = this.boss;
     if (this.phase !== 'boss' || !boss) return null;

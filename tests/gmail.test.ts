@@ -20,6 +20,7 @@ describe('parseFrom', () => {
     ['a@b.com (Some Name)', 'Some Name', 'a@b.com'],
     ['plain@x.com', 'plain@x.com', 'plain@x.com'],
     ['<only@x.com>', 'only@x.com', 'only@x.com'],
+    ['Maria <m@x.com> (Sales)', 'Maria', 'm@x.com'],
   ])('%s', (input, name, email) => {
     expect(parseFrom(input)).toEqual([name, email]);
   });
@@ -35,16 +36,28 @@ describe('decodeWords', () => {
 });
 
 describe('unsubPlan', () => {
+  const from = 'news@x.com';
   it('never plans a background POST to plain http (mixed content)', () => {
-    expect(unsubPlan({ listUnsubscribe: '<http://x.com/u>', oneClickUnsub: true } as never).kind).toBe('link');
+    expect(unsubPlan({ fromEmail: from, listUnsubscribe: '<http://x.com/u>', oneClickUnsub: true } as never).kind).toBe('link');
   });
 
   it('prefers one-click, then mailto, then a plain link', () => {
     const h = '<mailto:u@x.com?subject=bye>, <https://x.com/u>';
-    expect(unsubPlan({ listUnsubscribe: h, oneClickUnsub: true } as never).kind).toBe('one-click');
-    expect(unsubPlan({ listUnsubscribe: h } as never).kind).toBe('mailto');
-    expect(unsubPlan({ listUnsubscribe: '<https://x.com/u>' } as never).kind).toBe('link');
+    expect(unsubPlan({ fromEmail: from, listUnsubscribe: h, oneClickUnsub: true } as never).kind).toBe('one-click');
+    expect(unsubPlan({ fromEmail: from, listUnsubscribe: h } as never).kind).toBe('mailto');
+    expect(unsubPlan({ fromEmail: from, listUnsubscribe: '<https://x.com/u>' } as never).kind).toBe('link');
     expect(unsubPlan(undefined).kind).toBe('none');
+  });
+
+  it('uses the https link for one-click even when an http one comes first', () => {
+    const p = unsubPlan({ fromEmail: from, listUnsubscribe: '<http://x.com/a>, <https://x.com/b>', oneClickUnsub: true } as never);
+    expect(p).toEqual({ kind: 'one-click', url: 'https://x.com/b' });
+  });
+
+  it("only mails an unsubscribe to the sender's own site", () => {
+    expect(unsubPlan({ fromEmail: 'news@mail.shop.com.br', listUnsubscribe: '<mailto:sair@shop.com.br>' } as never).kind).toBe('mailto');
+    expect(unsubPlan({ fromEmail: 'news@shop.com', listUnsubscribe: '<mailto:boss@third.party>' } as never).kind).toBe('none');
+    expect(unsubPlan({ fromEmail: 'news@shop.com', listUnsubscribe: '<mailto:boss@third.party>, <https://shop.com/u>' } as never).kind).toBe('link');
   });
 });
 
@@ -73,11 +86,17 @@ describe('GmailSource unsubscribe by mailto', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('encodes accented subjects (RFC 2047)', async () => {
+  it("always sends its own words, never the sender's subject or body", async () => {
     const sent: string[] = [];
     vi.stubGlobal('fetch', vi.fn(async (_u: string, init: RequestInit) => { sent.push(JSON.parse(String(init.body)).raw); return json({}); }));
-    await new GmailSource('t').unsubscribe({ kind: 'mailto', url: 'mailto:a@x.com?subject=descadastrar%20s%C3%B3' });
-    expect(decodeRaw(sent[0])).toMatch(/^Subject: =\?UTF-8\?B\?.+\?=$/m);
+    const g = new GmailSource('t');
+    await g.unsubscribe({ kind: 'mailto', url: 'mailto:a@x.com?subject=I%20resign&body=Effective%20today' });
+    const msg = decodeRaw(sent[0]);
+    expect(msg).toMatch(/^Subject: unsubscribe$/m);
+    expect(msg).not.toMatch(/resign|Effective/);
+    // Undo and U again: the request is not sent twice.
+    await g.unsubscribe({ kind: 'mailto', url: 'mailto:a@x.com' });
+    expect(sent).toHaveLength(1);
   });
 });
 
@@ -126,6 +145,20 @@ describe('GmailSource.load', () => {
     expect(g.inboxUrl).toContain('authuser=me%40gmail.com');
   });
 
+  it('stops the scan on a 403 (no access) instead of showing an empty inbox', async () => {
+    const gmail = fakeGmail();
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.includes('/messages/') ? json({ error: 'forbidden' }, 403) : gmail(url))));
+    await expect(new GmailSource('t').load(() => {})).rejects.toThrow(/403/);
+  });
+
+  it('can be cancelled mid-scan', async () => {
+    vi.stubGlobal('fetch', fakeGmail());
+    const g = new GmailSource('t');
+    const p = g.load(() => {});
+    g.cancel();
+    await expect(p).rejects.toThrow(/cancelled/);
+  });
+
   it('turns a 401 into AuthExpiredError', async () => {
     vi.stubGlobal('fetch', fakeGmail({ status401: true }));
     await expect(new GmailSource('t').load(() => {})).rejects.toBeInstanceOf(AuthExpiredError);
@@ -146,6 +179,19 @@ describe('GmailSource.trash', () => {
     expect(hits).toContain('/messages/y/trash');
     hits.length = 0;
     await g.undo('trash', ['x']);
+    expect(hits).toContain('/messages/x/untrash');
+  });
+
+  it('puts back the emails already trashed when the fallback fails halfway', async () => {
+    const hits: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      hits.push(url.replace(/^.*\/users\/me/, ''));
+      if (url.endsWith('/batchModify') && String(init?.body).includes('TRASH')) return json({ error: 'Invalid label' }, 400);
+      if (url.endsWith('/messages/y/trash')) return json({ error: 'nope' }, 400);
+      return new Response(null, { status: 204 });
+    }));
+    await expect(new GmailSource('t').trash(['x', 'y'])).rejects.toThrow(/refused trash/);
+    expect(hits).toContain('/messages/x/trash');
     expect(hits).toContain('/messages/x/untrash');
   });
 

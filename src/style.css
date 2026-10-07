@@ -322,6 +322,23 @@ canvas.monster.small { width: 44px; height: 36px; }
   .card h3 { font-size: 11px; }
 }
 
+/* ---------- short screens (laptop at 150% zoom, 1280x720) ---------- */
+
+@media (max-height: 760px) and (min-width: 601px) {
+  #stage { padding: 10px 16px; gap: 10px; }
+  #hud { padding: 8px 12px; }
+  .clear { gap: 10px; }
+  .logo.small { font-size: clamp(22px, 5vw, 40px); }
+  .stats div { padding: 8px; }
+  .stats dt { margin-bottom: 6px; }
+  .stats dd { font-size: 14px; }
+  .quests { padding: 8px 14px; }
+  .quests ul { margin-top: 4px; line-height: 1.7; }
+  #controls { gap: 8px; }
+  .btn { min-height: 44px; padding: 8px 14px; }
+  .mini { min-height: 30px; padding: 4px 10px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
   /* Stamps carry information (FIGHT, ARCHIVED...): show them still, then fade, instead of vanishing. */

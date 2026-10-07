@@ -3,33 +3,61 @@ import { audioContext, setAudioTap } from './audio';
 // Recording helper for the demo video. Open the game with ?rec and the game audio
 // (music + effects) is recorded from the FIGHT! stamp until a few seconds after the
 // final screen, then downloaded as inbox-raid-audio.webm. The FIGHT! frame in the screen
-// capture lines up with second 0 of this file. Nothing changes without ?rec.
+// capture lines up with second 0 of this file. Nothing changes without ?rec, and a
+// browser that cannot record just plays on.
 
 const enabled = new URLSearchParams(location.search).has('rec');
 let recorder: MediaRecorder | null = null;
-let chunks: Blob[] = [];
+let stopTimer = 0;
 
 export function recStart() {
-  if (!enabled || recorder) return;
-  const dest = audioContext.createMediaStreamDestination();
-  setAudioTap(dest);
-  chunks = [];
-  recorder = new MediaRecorder(dest.stream, { mimeType: 'audio/webm;codecs=opus' });
-  recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-  recorder.onstop = () => {
+  if (!enabled) return;
+  recStop(); // a new raid closes the previous take first
+  try {
+    if (typeof MediaRecorder === 'undefined') throw new Error('MediaRecorder not supported');
+    const dest = audioContext.createMediaStreamDestination();
+    const mimeType = ['audio/webm;codecs=opus', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported(t));
+    const rec = new MediaRecorder(dest.stream, mimeType ? { mimeType } : undefined);
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    rec.onstop = () => {
+      const url = URL.createObjectURL(new Blob(chunks, { type: rec.mimeType || 'audio/webm' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'inbox-raid-audio.webm';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    };
+    setAudioTap(dest);
+    rec.start(1000);
+    recorder = rec;
+  } catch (err) {
+    console.warn('Audio recording is off:', err);
     setAudioTap(null);
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(chunks, { type: 'audio/webm' }));
-    a.download = 'inbox-raid-audio.webm';
-    a.click();
     recorder = null;
-  };
-  recorder.start(1000);
+  }
+}
+
+/** Stops now and downloads what was recorded. */
+export function recStop() {
+  clearTimeout(stopTimer);
+  const r = recorder;
+  recorder = null;
+  if (!r) return;
+  setAudioTap(null);
+  try { if (r.state !== 'inactive') r.stop(); } catch (err) { console.warn(err); }
 }
 
 /** Keeps recording a little after the end, so the fanfare is in the file. */
 export function recStopSoon(ms = 4000) {
   if (!recorder) return;
-  const r = recorder;
-  setTimeout(() => { if (r.state === 'recording') r.stop(); }, ms);
+  clearTimeout(stopTimer);
+  stopTimer = window.setTimeout(recStop, ms);
+}
+
+/** An undo on the final screen goes back to the fight: keep recording. */
+export function recKeepGoing() {
+  clearTimeout(stopTimer);
 }

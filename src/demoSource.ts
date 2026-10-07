@@ -26,7 +26,7 @@ export class DemoSource implements InboxSource {
   async trash(_ids: string[]) {}
   async star(_ids: string[]) {}
   async unsubscribe(_plan: UnsubPlan): Promise<UnsubResult> {
-    return { ok: true, method: 'demo' };
+    return { ok: true, confirmed: true, method: 'demo' };
   }
   async undo(_kind: ActionKind, _ids: string[]) {}
 }

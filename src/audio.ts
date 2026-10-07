@@ -121,6 +121,7 @@ class Music {
   }
 
   private schedule() {
+    if (document.hidden) return; // nobody is listening; resumes from now when the tab is back
     const sixteenth = 60 / this.bpm / 4;
     // After a hidden or frozen tab, skip the missed notes instead of playing them all at once.
     if (this.nextAt < ctx.currentTime) this.nextAt = ctx.currentTime + 0.05;

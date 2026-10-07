@@ -60,10 +60,16 @@ export async function renderShareCard(r: Raid, isDemo: boolean): Promise<HTMLCan
   const zero = r.inboxLeft === 0;
   text(ctx, zero ? 'INBOX ZERO' : 'STAGE CLEAR', W / 2, 200, 64, '#ffd23f', 'center', 6);
 
-  // Before -> after.
-  text(ctx, fmt(r.inboxStart), W / 2 - 60, 300, 52, '#ff2e88', 'right', 4);
-  text(ctx, '>', W / 2, 296, 36, '#8a8fc0', 'center');
-  text(ctx, fmt(r.inboxLeft), W / 2 + 60, 300, 52, '#3cff7a', 'left', 4);
+  // Before -> after, centred as one group whatever the widths of the two numbers.
+  const from = fmt(r.inboxStart);
+  const to = fmt(r.inboxLeft);
+  const gap = 60;
+  ctx.font = `52px ${FONT}`;
+  const wFrom = ctx.measureText(from).width;
+  const x0 = W / 2 - (wFrom + gap * 2 + ctx.measureText(to).width) / 2;
+  text(ctx, from, x0, 300, 52, '#ff2e88', 'left', 4);
+  text(ctx, '>', x0 + wFrom + gap, 296, 36, '#8a8fc0', 'center');
+  text(ctx, to, x0 + wFrom + gap * 2, 300, 52, '#3cff7a', 'left', 4);
 
   // Stats row.
   const cleared = r.stats.archived + r.stats.trashed + r.stats.starred;
@@ -106,7 +112,7 @@ export async function renderShareCard(r: Raid, isDemo: boolean): Promise<HTMLCan
 }
 
 /** Shares the card where the device can (phones), otherwise downloads it. */
-export async function shareCard(canvas: HTMLCanvasElement): Promise<'shared' | 'saved'> {
+export async function shareCard(canvas: HTMLCanvasElement): Promise<'shared' | 'saved' | 'cancelled'> {
   const blob = await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('No image'))), 'image/png'));
   const file = new File([blob], 'inbox-raid.png', { type: 'image/png' });
   const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
@@ -114,12 +120,17 @@ export async function shareCard(canvas: HTMLCanvasElement): Promise<'shared' | '
     try {
       await navigator.share({ files: [file], title: 'Inbox Raid', text: `I raided my inbox. ${SITE}` });
       return 'shared';
-    } catch { /* cancelled: fall back to download */ }
+    } catch (err) {
+      // The player closed the share sheet: respect that, no surprise download.
+      if ((err as Error).name === 'AbortError') return 'cancelled';
+    }
   }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'inbox-raid.png';
+  document.body.appendChild(a);
   a.click();
+  a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   return 'saved';
 }

@@ -79,3 +79,15 @@ describe('Raid', () => {
     expect(r.stress).toBeLessThanOrEqual(1.2 + 1e-9);
   });
 });
+
+describe('Raid.unsubFailed', () => {
+  it('counts a boss whose unsubscribe did not go out as archived', () => {
+    const { bosses, horde } = splitInbox([mail('x@x.com'), mail('x@x.com'), mail('x@x.com')]);
+    const r = new Raid(bosses, horde);
+    const hit = r.hitBoss('unsubscribe')!;
+    expect(r.stats.unsubscribed).toBe(1);
+    r.unsubFailed(hit);
+    expect(r.stats.unsubscribed).toBe(0);
+    expect(bosses[0].status).toBe('archived');
+  });
+});

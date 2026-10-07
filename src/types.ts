@@ -21,20 +21,50 @@ export interface UnsubPlan {
 
 export function unsubPlan(m: Mail | undefined): UnsubPlan {
   const links = [...(m?.listUnsubscribe ?? '').matchAll(/<([^>]+)>/g)].map((x) => x[1].trim());
-  const http = links.find((l) => /^https?:\/\//i.test(l));
-  const mailto = links.find((l) => /^mailto:/i.test(l));
+  const https = links.find((l) => /^https:\/\//i.test(l));
+  const http = https ?? links.find((l) => /^http:\/\//i.test(l));
+  // The address comes from the sender: only mail an unsubscribe to the sender's own site.
+  const mailto = links.find((l) => /^mailto:/i.test(l) && sameSite(mailtoAddress(l), m?.fromEmail ?? ''));
   // A background POST to plain http:// is blocked from an https page (mixed content),
   // so one-click needs https; an http link can still be opened as a page.
-  if (http && /^https:/i.test(http) && m?.oneClickUnsub) return { kind: 'one-click', url: http };
+  if (https && m?.oneClickUnsub) return { kind: 'one-click', url: https };
   if (mailto) return { kind: 'mailto', url: mailto };
   if (http) return { kind: 'link', url: http };
   return { kind: 'none', url: '' };
 }
 
+/** mailto:list@shop.com?subject=x -> list@shop.com ('' if it cannot be read). */
+export function mailtoAddress(url: string): string {
+  try {
+    return decodeURIComponent(url.replace(/^mailto:/i, '').split('?')[0]).replace(/[\r\n]+/g, ' ').trim();
+  } catch {
+    return '';
+  }
+}
+
+/** news.shop.com.br -> shop.com.br; mail.x.co.uk -> x.co.uk; a.b.com -> b.com */
+function site(host: string): string {
+  const p = host.toLowerCase().split('.').filter(Boolean);
+  const twoPart = p.length > 2 && p.at(-1)!.length === 2 && /^(com|net|org|gov|edu|co|ac|ne|or|go|gob|mil)$/.test(p.at(-2)!);
+  return p.slice(twoPart ? -3 : -2).join('.');
+}
+
+function sameSite(a: string, b: string): boolean {
+  const ha = a.split('@')[1];
+  const hb = b.split('@')[1];
+  return !!ha && !!hb && site(ha) === site(hb);
+}
+
 export type ActionKind = 'archive' | 'trash' | 'star' | 'unsubscribe';
 
 export interface UnsubResult {
+  /** The request went out. */
   ok: boolean;
+  /**
+   * We saw it accepted (Gmail sent the email). A one-click POST is opaque from the browser:
+   * it is requested, never confirmed.
+   */
+  confirmed: boolean;
   /** How it was done, shown to the player. */
   method: 'one-click' | 'mailto' | 'link' | 'none' | 'demo';
 }
@@ -56,6 +86,10 @@ export interface InboxSource {
   unsubscribe(plan: UnsubPlan): Promise<UnsubResult>;
   /** Puts emails back in the inbox exactly as before the action. */
   undo(kind: ActionKind, ids: string[]): Promise<void>;
+  /** Stops a scan in progress (its load() then rejects). */
+  cancel?(): void;
+  /** Rereads the real inbox size, for an honest INBOX ZERO. */
+  countInbox?(): Promise<number>;
 }
 
 /** The Google session ended; the player must reconnect (needs a click). */

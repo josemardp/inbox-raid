@@ -1,4 +1,4 @@
-import { AuthExpiredError, type ActionKind, type InboxSource, type Mail, type UnsubPlan, type UnsubResult } from './types';
+import { AuthExpiredError, mailtoAddress, type ActionKind, type InboxSource, type Mail, type UnsubPlan, type UnsubResult } from './types';
 
 // Real mode. Talks to the Gmail API straight from the browser with a short-lived token.
 // No server, no stored credentials. Scope gmail.modify cannot permanently delete anything.
@@ -68,9 +68,9 @@ function header(headers: { name: string; value: string }[], name: string): strin
   return headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? '';
 }
 
-/** "Doe, John" <jd@corp.com> -> ["Doe, John", "jd@corp.com"]; also "a@b.com (Name)" and bare addresses. */
+/** "Doe, John" <jd@corp.com> -> ["Doe, John", "jd@corp.com"]; also "a@b.com (Name)", a trailing (comment) and bare addresses. */
 export function parseFrom(v: string): [string, string] {
-  const angle = v.match(/<([^<>]+)>\s*$/);
+  const angle = v.match(/<([^<>]+)>\s*(?:\([^()]*\)\s*)?$/);
   if (angle) {
     const email = angle[1].trim();
     const name = v.slice(0, angle.index).trim().replace(/^"(.*)"$/, '$1').replace(/\\"/g, '"').trim();
@@ -81,30 +81,36 @@ export function parseFrom(v: string): [string, string] {
   return [v.trim(), v.trim()];
 }
 
-/** One worker loop per slot; a failing item is counted, never fatal. */
-async function pool<T>(items: T[], n: number, fn: (item: T) => Promise<void>): Promise<number> {
+export class GmailError extends Error {
+  constructor(readonly status: number, body: string) { super(`Gmail ${status}: ${body}`); }
+}
+
+/**
+ * One worker loop per slot. A failure the caller tolerates is counted and skipped;
+ * anything else stops the whole run.
+ */
+async function pool<T>(items: T[], n: number, fn: (item: T) => Promise<void>, tolerate: (err: unknown) => boolean): Promise<number> {
   let i = 0;
   let failed = 0;
+  let stop: unknown = null;
   await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
-    while (i < items.length) {
+    while (i < items.length && !stop) {
       const item = items[i++];
       try { await fn(item); } catch (err) {
-        if (err instanceof AuthExpiredError) throw err;
+        if (err instanceof AuthExpiredError || !tolerate(err)) { stop ??= err; return; }
         failed++;
         console.warn('Skipped one email:', err);
       }
     }
   }));
+  if (stop) throw stop;
   return failed;
 }
 
 const EMAIL = /^[^\s@<>,;:"]+@[^\s@<>,;:"]+\.[^\s@<>,;:"]+$/;
-const oneLine = (s: string) => s.replace(/[\r\n]+/g, ' ').trim();
 
-/** RFC 2047 encoded-word for non-ASCII subjects. */
-function encodeHeader(s: string): string {
-  return /^[\x20-\x7e]*$/.test(s) ? s : `=?UTF-8?B?${base64(s)}?=`;
-}
+/** Actions happen while the player waits: a few quick retries, never the scan's long waits. */
+const QUICK = { tries: 2, quick: true };
 
 export class GmailSource implements InboxSource {
   readonly label = 'YOUR GMAIL';
@@ -112,37 +118,52 @@ export class GmailSource implements InboxSource {
   inboxTotal = 0;
   inboxUrl = 'https://mail.google.com/mail/#inbox';
   private wasStarred = new Set<string>();
+  /** Unsubscribes already sent this session, so undo + U again does not send twice. */
+  private sent = new Set<string>();
   private nextReadAt = 0;
-  /** Lets the scan screen say why it is waiting. */
-  private onWait: (note: string) => void = () => {};
+  private cancelled = false;
+  /** Tells the player why Gmail is making them wait (scan screen or a toast). */
+  onWait: (note: string) => void = () => {};
 
   constructor(private token: string) {}
 
   setToken(token: string) { this.token = token; }
 
-  private async call<T>(path: string, init: RequestInit = {}, tries = 6): Promise<T> {
+  cancel() { this.cancelled = true; }
+
+  private async call<T>(path: string, init: RequestInit = {}, opts: { tries?: number; quick?: boolean } = {}, attempt = 0): Promise<T> {
+    const tries = opts.tries ?? 6;
+    const again = async (waitMs: number, note: string) => {
+      this.onWait(note);
+      await sleep(waitMs);
+      return this.call<T>(path, init, opts, attempt + 1);
+    };
+    const backoff = 1000 * 2 ** attempt; // 1 s, 2 s, 4 s
     let res: Response;
     try {
       res = await fetch(path.startsWith('http') ? path : API + path, {
         ...init,
+        signal: AbortSignal.timeout(20_000),
         headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json', ...(init.headers || {}) },
       });
     } catch (err) {
-      if (tries <= 0) throw err;
-      await sleep(1500);
-      return this.call<T>(path, init, tries - 1);
+      if (attempt >= tries) throw err;
+      return again(opts.quick ? backoff : 1500, 'Gmail is not answering, retrying...');
     }
     if (res.status === 401) throw new AuthExpiredError();
-    if ((res.status === 429 || res.status === 403 && /rate/i.test(await res.clone().text()) || res.status >= 500) && tries > 0) {
-      // Quota is per minute: wait for it to refill instead of giving up.
+    const limited = res.status === 429 || (res.status === 403 && /rate/i.test(await res.clone().text()));
+    if ((limited || res.status >= 500) && attempt < tries) {
+      // The scan waits for the per-minute quota to refill; an action only retries briefly.
       const retryAfter = Number(res.headers.get('Retry-After')) || 0;
-      const waitMs = res.status >= 500 ? 2000 : Math.max(retryAfter * 1000, 15_000);
-      this.onWait(res.status >= 500 ? 'Gmail hiccup, retrying...' : 'Gmail asked us to slow down...');
-      await sleep(waitMs);
-      return this.call<T>(path, init, tries - 1);
+      const waitMs = opts.quick ? backoff : res.status >= 500 ? 2000 : Math.max(retryAfter * 1000, 15_000);
+      return again(waitMs, res.status >= 500 ? 'Gmail hiccup, retrying...' : 'Gmail asked us to slow down...');
     }
-    if (!res.ok) throw new Error(`Gmail ${res.status}: ${await res.text()}`);
+    if (!res.ok) throw new GmailError(res.status, await res.text());
     return res.status === 204 ? (undefined as T) : res.json();
+  }
+
+  async countInbox(): Promise<number> {
+    return (await this.call<{ messagesTotal: number }>('/labels/INBOX', {}, QUICK)).messagesTotal;
   }
 
   /** Spaces reads so the per-minute quota is never hit. */
@@ -154,6 +175,17 @@ export class GmailSource implements InboxSource {
   }
 
   async load(onProgress: (loaded: number, total: number, note?: string) => void): Promise<Mail[]> {
+    const notify = this.onWait;
+    this.cancelled = false;
+    this.wasStarred.clear();
+    try {
+      return await this.scan(onProgress);
+    } finally {
+      this.onWait = notify;
+    }
+  }
+
+  private async scan(onProgress: (loaded: number, total: number, note?: string) => void): Promise<Mail[]> {
     const [label, profile] = await Promise.all([
       this.call<{ messagesTotal: number }>('/labels/INBOX'),
       this.call<{ emailAddress: string }>('/profile'),
@@ -179,8 +211,10 @@ export class GmailSource implements InboxSource {
       .map((h) => `metadataHeaders=${encodeURIComponent(h)}`).join('&');
     const fields = 'fields=id,labelIds,snippet,internalDate,payload/headers';
     const failed = await pool(todo, WORKERS, async (id) => {
+      if (this.cancelled) throw new Error('Scan cancelled');
       await this.paced();
-      const m = await this.call<{ id: string; labelIds?: string[]; snippet: string; internalDate: string; payload: { headers: { name: string; value: string }[] } }>(
+      if (this.cancelled) throw new Error('Scan cancelled');
+      const m =await this.call<{ id: string; labelIds?: string[]; snippet: string; internalDate: string; payload: { headers: { name: string; value: string }[] } }>(
         `/messages/${id}?format=metadata&${meta}&${fields}`);
       const h = m.payload.headers;
       const [fromName, fromEmail] = parseFrom(decodeWords(header(h, 'From')));
@@ -194,12 +228,12 @@ export class GmailSource implements InboxSource {
         snippet: decodeEntities(m.snippet),
         date: Number(m.internalDate),
         listUnsubscribe: header(h, 'List-Unsubscribe') || undefined,
-        oneClickUnsub: /one-click/i.test(header(h, 'List-Unsubscribe-Post')),
+        // RFC 8058 asks for this exact value.
+        oneClickUnsub: /^\s*List-Unsubscribe\s*=\s*One-Click\s*$/i.test(header(h, 'List-Unsubscribe-Post')),
         starred,
       });
       onProgress(mails.length, todo.length);
-    });
-    this.onWait = () => {};
+    }, (err) => err instanceof GmailError && err.status === 404); // an email deleted mid-scan; a 403 means no access
     if (failed) console.warn(`${failed} emails could not be read and were left alone.`);
     onProgress(mails.length, todo.length);
     return mails.sort((a, b) => b.date - a.date);
@@ -210,7 +244,7 @@ export class GmailSource implements InboxSource {
       await this.call('/messages/batchModify', {
         method: 'POST',
         body: JSON.stringify({ ids: ids.slice(i, i + 1000), addLabelIds: add, removeLabelIds: remove }),
-      });
+      }, QUICK);
     }
   }
 
@@ -238,12 +272,31 @@ export class GmailSource implements InboxSource {
     }
   }
 
+  /** All or nothing: if some emails fail, the ones already moved are put back, so the game can roll back honestly. */
   private async perMessage(ids: string[], op: 'trash' | 'untrash') {
-    const failed = await pool(ids, WORKERS, async (id) => {
-      await this.paced();
-      await this.call(`/messages/${id}/${op}`, { method: 'POST' });
-    });
-    if (failed) throw new Error(`Gmail refused ${op} for ${failed} emails`);
+    const done: string[] = [];
+    let failed = 0;
+    try {
+      failed = await pool(ids, WORKERS, async (id) => {
+        await this.paced();
+        await this.call(`/messages/${id}/${op}`, { method: 'POST' }, QUICK);
+        done.push(id);
+      }, () => true);
+    } catch (err) {
+      failed = ids.length - done.length;
+      if (err instanceof AuthExpiredError) throw err;
+    }
+    if (!failed) return;
+    if (op === 'trash' && done.length) {
+      try {
+        await this.perMessage(done, 'untrash');
+        await this.modify(done, ['INBOX'], []);
+      } catch (err) {
+        console.error('Could not put back', done, err);
+        throw new Error(`Gmail refused trash for ${failed} emails; ${done.length} may still be in Trash`);
+      }
+    }
+    throw new Error(`Gmail refused ${op} for ${failed} emails`);
   }
 
   async undo(kind: ActionKind, ids: string[]) {
@@ -261,35 +314,38 @@ export class GmailSource implements InboxSource {
 
   async unsubscribe(plan: UnsubPlan): Promise<UnsubResult> {
     if (plan.kind === 'one-click') {
-      // RFC 8058: a plain form POST. The response is opaque, the request still lands.
+      if (this.sent.has(plan.url)) return { ok: true, confirmed: false, method: 'one-click' };
+      // RFC 8058: a plain form POST. The response is opaque from a browser, so the game
+      // only knows the request went out, not that the sender accepted it.
       await fetch(plan.url, {
         method: 'POST', mode: 'no-cors',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: 'List-Unsubscribe=One-Click',
+        signal: AbortSignal.timeout(8000),
       });
-      return { ok: true, method: 'one-click' };
+      this.sent.add(plan.url);
+      return { ok: true, confirmed: false, method: 'one-click' };
     }
     if (plan.kind === 'mailto') {
-      const url = new URL(plan.url);
-      const to = oneLine(decodeURIComponent(url.pathname));
+      const to = mailtoAddress(plan.url);
       // The header comes from the sender: never let it add recipients or headers.
-      if (!EMAIL.test(to)) return { ok: false, method: 'none' };
-      const subject = oneLine(url.searchParams.get('subject') || 'unsubscribe');
-      const body = (url.searchParams.get('body') || 'unsubscribe').replace(/\r?\n/g, '\r\n');
+      if (!EMAIL.test(to)) return { ok: false, confirmed: false, method: 'none' };
+      if (this.sent.has(to)) return { ok: true, confirmed: true, method: 'mailto' };
+      // Subject and body are always ours: a sender cannot make the player send its words.
       const raw = [
         `To: ${to}`,
-        `Subject: ${encodeHeader(subject)}`,
+        'Subject: unsubscribe',
         'MIME-Version: 1.0',
         'Content-Type: text/plain; charset=UTF-8',
-        'Content-Transfer-Encoding: base64',
         '',
-        base64(body),
+        'unsubscribe',
       ].join('\r\n');
       // No retries: a retried send would unsubscribe twice.
-      await this.call('/messages/send', { method: 'POST', body: JSON.stringify({ raw: base64url(raw) }) }, 0);
-      return { ok: true, method: 'mailto' };
+      await this.call('/messages/send', { method: 'POST', body: JSON.stringify({ raw: base64url(raw) }) }, { tries: 0 });
+      this.sent.add(to);
+      return { ok: true, confirmed: true, method: 'mailto' };
     }
-    return { ok: false, method: plan.kind === 'link' ? 'link' : 'none' };
+    return { ok: false, confirmed: false, method: plan.kind === 'link' ? 'link' : 'none' };
   }
 }
 
