@@ -33,13 +33,25 @@ const ev = (type, data = {}) => { const e = { t: Date.now(), type, ...data }; ev
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const rand = (a, b) => a + Math.random() * (b - a);
 
+// A profile closed by force opens with a "restore pages" bar that shrinks the captured
+// page: mark it as closed normally first.
+for (const prefs of [path.join(PROFILE, 'Default', 'Preferences')]) {
+  try {
+    const p = JSON.parse(fs.readFileSync(prefs, 'utf8'));
+    p.profile = { ...(p.profile || {}), exit_type: 'Normal', exited_cleanly: true };
+    fs.writeFileSync(prefs, JSON.stringify(p));
+  } catch { /* fresh profile */ }
+}
+
 const ctx = await chromium.launchPersistentContext(PROFILE, {
   channel: 'chrome',
-  headless: false, // headless screencasts come out at 1280x720 whatever the scale
+  // Headless: no window, so no browser bar (translate, debugging, restore) can shrink the
+  // captured page. The scale flag makes the screencast 1920x1080.
+  headless: true,
   viewport: { width: 1280, height: 720 },
-  deviceScaleFactor: 1.5,
   acceptDownloads: true,
-  args: ['--window-position=0,0', '--disable-features=Translate,TranslateUI', '--autoplay-policy=no-user-gesture-required', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding'],
+  ignoreDefaultArgs: ['--enable-automation'],
+  args: ['--force-device-scale-factor=1.5', '--hide-crash-restore-bubble', '--disable-session-crashed-bubble', '--no-default-browser-check', '--disable-features=Translate,TranslateUI', '--autoplay-policy=no-user-gesture-required', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding'],
 });
 const page = ctx.pages()[0] || await ctx.newPage();
 await page.addInitScript(() => {
@@ -66,7 +78,8 @@ let frameN = 0;
 cdp.on('Page.screencastFrame', async ({ data, metadata, sessionId }) => {
   const n = ++frameN;
   const file = `${String(n).padStart(6, '0')}.jpg`;
-  frames.push({ file, t: metadata.timestamp * 1000 });
+  frames.push({ file, t: metadata.timestamp * 1000, h: metadata.deviceHeight });
+  if (frames.length > 1 && Math.abs(metadata.deviceHeight - frames[0].h) > 1 && !frames.sizeWarned) { frames.sizeWarned = true; ev('frame-size-changed', { from: frames[0].h, to: metadata.deviceHeight }); }
   fs.writeFile(path.join(OUT, 'frames', file), Buffer.from(data, 'base64'), () => {});
   cdp.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
 });
@@ -190,6 +203,9 @@ await sleep(2600);
 let s = await state();
 if (PRIVACY !== s.privacyOn) { await press('p', 'privacy'); await sleep(2200); }
 await sleep(900);
+
+// Never touch the inbox if the capture is already broken.
+if (frames.sizeWarned) { ev('abort', { why: 'frame size changed before the raid' }); await ctx.close(); process.exit(2); }
 
 if (MODE === 'gmail') {
   const popupP = ctx.waitForEvent('page', { timeout: 20000 });
