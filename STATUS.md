@@ -42,7 +42,7 @@ Atualizado: 07/10/2026, ~12:45 (quarta, dia 3 do Hackyard).
 
 ## Entrega no Hackyard (falta o "sim" do Josemar)
 - Campos: repo (obrigatório), vídeo, texto até 500 caracteres, modelo de IA (Claude Code), recibo opcional. Entregar de novo substitui a entrega anterior.
-- **Texto sugerido (449 caracteres):**
+- **Texto sugerido (444 caracteres):**
 > INBOX RAID turns inbox cleanup into an arcade raid. Senders who flood you become bosses whose HP is their email count; every hit really archives, trashes or unsubscribes in Gmail, and Z undoes it in Gmail too. Then a horde of single emails rewards fast calls with combos. Runs 100% in the browser, no server, in English and Portuguese. Play the no-login demo; the video shows a real inbox going to zero. Built solo with Claude Code for Yard #4.
 
 ## Próximo passo
