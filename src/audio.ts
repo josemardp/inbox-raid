@@ -3,17 +3,19 @@ import { ZZFX, zzfx } from 'zzfx';
 // Sound effects are ZzFX parameter lists, generated in code (no audio files, no licensing).
 type Params = (number | undefined)[];
 
+// Shapes: 0 sine, 1 triangle, 2 saw, 3 tan, 4 noise. No white noise and no bitcrush:
+// they made the mix hiss. Rounder waves, a little noise only for texture.
 const SFX: Record<string, Params> = {
-  hit: [1.1, 0.05, 320, 0.01, 0.02, 0.15, 2, 1.5, -5, , , , , 1.2, , 0.1, , 0.7, 0.05],
-  trash: [1.4, 0.1, 90, 0.01, 0.1, 0.4, 4, 2, , , , , , 1.2, , 0.6, 0.1, 0.5, 0.1],
-  boom: [2, 0.1, 55, 0.03, 0.3, 0.9, 4, 1.5, , , , , , 2, , 0.8, 0.2, 0.4, 0.2],
-  coin: [0.9, 0.05, 820, , 0.03, 0.2, 1, 1.5, , , 420, 0.05],
-  boss: [1.4, 0, 110, 0.05, 0.3, 0.4, 2, 1, -1, , , , 0.08],
-  overload: [1.4, 0.1, 220, 0.05, 0.2, 0.35, 3, 2, -10, , , , , , 20],
-  tick: [0.35, 0, 1300, , 0.01, 0.02, 1, 0],
-  select: [0.6, 0, 620, , 0.01, 0.05, 1],
-  undo: [0.8, 0, 200, , 0.05, 0.12, 1, 1, 8],
-  spare: [0.7, 0, 400, 0.02, 0.05, 0.15, 0, 1, 2],
+  hit: [1, 0.05, 300, 0.01, 0.03, 0.14, 1, 1.2, -6, , , , , 0.15, , , , 0.7, 0.05],
+  trash: [1.1, 0.05, 150, 0.01, 0.08, 0.32, 3, 1, -9, , , , , 0.25, , , 0.04, 0.6, 0.1],
+  boom: [1.8, 0.05, 62, 0.02, 0.25, 0.8, 0, 1.4, -2, , , , , 0.5, , , 0.1, 0.5, 0.2],
+  coin: [0.8, 0.05, 820, , 0.03, 0.2, 1, 1.5, , , 420, 0.05],
+  boss: [1.2, 0, 110, 0.05, 0.3, 0.4, 1, 1, -1, , , , 0.08],
+  overload: [1.2, 0.1, 200, 0.05, 0.2, 0.35, 3, 1.6, -10, , , , , , 12],
+  tick: [0.28, 0, 1100, 0.002, 0.01, 0.02, 0, 1],
+  select: [0.5, 0, 620, , 0.01, 0.05, 1],
+  undo: [0.7, 0, 200, , 0.05, 0.12, 1, 1, 8],
+  spare: [0.6, 0, 400, 0.02, 0.05, 0.15, 0, 1, 2],
 };
 
 let muted = false;
@@ -83,6 +85,12 @@ const ctx = ZZFX.audioContext;
 const master = ctx.createGain();
 master.gain.value = muted ? 0 : 0.9;
 master.connect(ctx.destination);
+// The music runs through a gentle low-pass, so the square bass sounds warm, not buzzy.
+const musicBus = ctx.createBiquadFilter();
+musicBus.type = 'lowpass';
+musicBus.frequency.value = 2600;
+musicBus.Q.value = 0.5;
+musicBus.connect(master);
 
 const midi = (n: number) => 440 * 2 ** ((n - 69) / 12);
 const CHORDS = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];
@@ -92,9 +100,11 @@ function note(freq: number, start: number, dur: number, type: OscillatorType, vo
   const g = ctx.createGain();
   o.type = type;
   o.frequency.value = freq;
-  g.gain.setValueAtTime(vol, start);
+  // A 5 ms fade-in: an instant start clicks across the whole spectrum.
+  g.gain.setValueAtTime(0.0001, start);
+  g.gain.linearRampToValueAtTime(vol, start + 0.005);
   g.gain.exponentialRampToValueAtTime(0.001, start + dur);
-  o.connect(g).connect(master);
+  o.connect(g).connect(musicBus);
   o.onended = () => { o.disconnect(); g.disconnect(); };
   o.start(start);
   o.stop(start + dur + 0.02);
@@ -131,7 +141,8 @@ class Music {
       const chord = CHORDS[bar];
       if (s % 4 === 0) note(midi(chord[0] - 24 + (s === 8 ? 12 : 0)), this.nextAt, sixteenth * 3, 'square', 0.07);
       if (s % 2 === 0) note(midi(chord[(s / 2) % 3] + 12), this.nextAt, sixteenth * 1.5, 'triangle', 0.06);
-      if (s % 8 === 4) note(1800, this.nextAt, 0.03, 'square', 0.015);
+      // A soft low pulse on the beat instead of a bright click.
+      if (s % 4 === 0) note(58, this.nextAt, 0.12, 'sine', 0.09);
       this.nextAt += sixteenth;
       this.step++;
     }

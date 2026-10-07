@@ -239,5 +239,8 @@ still('s8-end', endCard, 5.5, { fadeIn: 0.6, fadeOut: 0.8, bed: bedStart + 20, b
 
 fs.writeFileSync(path.join(work, 'list.txt'), segs.map((s) => `file '${s.replace(/\\/g, '/')}'`).join('\n'));
 const OUTF = path.join(dir, 'inbox-raid-demo.mp4');
-run(['-f', 'concat', '-safe', '0', '-i', path.join(work, 'list.txt'), '-c', 'copy', '-movflags', '+faststart', OUTF]);
+const joined = path.join(work, 'joined.mp4');
+run(['-f', 'concat', '-safe', '0', '-i', path.join(work, 'list.txt'), '-c', 'copy', joined]);
+// Loudness at YouTube's level, with a little air taken off the top.
+run(['-i', joined, '-c:v', 'copy', '-af', 'highshelf=f=6000:g=-3,loudnorm=I=-14:TP=-1.5:LRA=11', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart', OUTF]);
 console.log('done', OUTF);

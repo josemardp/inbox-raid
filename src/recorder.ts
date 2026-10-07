@@ -17,7 +17,8 @@ export function recStart() {
     if (typeof MediaRecorder === 'undefined') throw new Error('MediaRecorder not supported');
     const dest = audioContext.createMediaStreamDestination();
     const mimeType = ['audio/webm;codecs=opus', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported(t));
-    const rec = new MediaRecorder(dest.stream, mimeType ? { mimeType } : undefined);
+    // A high bitrate: the default Opus rate added its own fizz to the music.
+    const rec = new MediaRecorder(dest.stream, { ...(mimeType ? { mimeType } : {}), audioBitsPerSecond: 256_000 });
     const chunks: Blob[] = [];
     rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
     rec.onstop = () => {
