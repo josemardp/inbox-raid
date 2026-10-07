@@ -47,7 +47,7 @@ Atualizado: 07/10/2026, ~13:25 (quarta, dia 3 do Hackyard).
 > INBOX RAID turns inbox cleanup into an arcade raid. Senders who flood you become bosses whose HP is their email count; every hit really archives, trashes or unsubscribes in Gmail, and Z undoes it in Gmail too. Then a horde of single emails rewards fast calls with combos. Runs 100% in the browser, no server, in English and Portuguese. Play the no-login demo; the video shows a real inbox going to zero. Built solo with Claude Code for Yard #4.
 
 ## Em andamento (07/10 tarde): Mesa de Triagem + Briefing da missão
-- **Commit local, ainda sem push** (o push publica o jogo do link da entrega).
+- **No ar desde 07/10 ~14:05** (commit `e53f1f5`, deploy do Pages conferido).
 - Na tela inicial o jogador escolhe o estilo da horda (tecla `T`): **Clássico** (o do vídeo, intacto) ou **Mesa de Triagem** (minicartões à esquerda, arrastar para ARQUIVAR / LIXEIRA / AGIR; `↑` escolhe o cartão, setas enviam).
 - **AGIR abre o briefing:** texto completo (só desse e-mail, lido na hora), tipo detectado (golpe, conta, confirmação, reunião, pedido, pergunta, pessoal, informativo), pistas (datas, valores, links), dica de ação e resposta sugerida com 3 tons (sim, depois, não) no idioma do e-mail. Botões: salvar rascunho + missão (+300 pontos), missão, arquivar, lixeira, pôr na agenda (abre o Google Agenda preenchido). O relógio para enquanto o briefing está aberto.
 - **Nunca envia:** só cria rascunho no Gmail (`drafts.create`, coberto pelo escopo `gmail.modify` atual).
