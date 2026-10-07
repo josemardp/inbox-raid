@@ -30,6 +30,9 @@ body {
     linear-gradient(transparent 0 calc(100% - 1px), #ffffff08 0) 0 0 / 100% 32px,
     linear-gradient(90deg, transparent 0 calc(100% - 1px), #ffffff08 0) 0 0 / 32px 100%,
     var(--bg);
+  /* The screen shake moves #stage a few pixels: that must never grow the page. Real
+     content still scrolls, because the body grows with it. */
+  overflow: clip;
 }
 
 button { font: inherit; color: inherit; }
@@ -42,8 +45,6 @@ button { font: inherit; color: inherit; }
   margin: 0 auto;
   padding: 16px;
   gap: 16px;
-  /* A card flying off the bottom must not grow the page and flash a scrollbar. */
-  overflow-y: clip;
 }
 
 #screen { flex: 1; display: flex; flex-direction: column; justify-content: center; }
@@ -330,6 +331,7 @@ canvas.monster.small { width: 44px; height: 36px; }
   #stage { padding: 10px 16px; gap: 10px; }
   #hud { padding: 8px 12px; }
   .clear { gap: 10px; }
+  .title { gap: 14px; }
   .logo.small { font-size: clamp(22px, 5vw, 40px); }
   .stats div { padding: 8px; }
   .stats dt { margin-bottom: 6px; }
