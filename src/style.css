@@ -174,6 +174,7 @@ canvas.monster.parade:nth-child(2n) { animation-delay: -.25s; }
 .scan-note { margin: 0; min-height: 1.4em; font: 400 13px var(--mono); color: var(--muted); }
 .found { margin: 0; font: 500 20px var(--display); }
 .found b { color: var(--blue); }
+.found.plan { padding: 10px 12px; background: var(--tile); font-size: 15px; }
 .found.dim { color: var(--muted); font-size: 15px; }
 .ready { margin: 0; font: 700 30px var(--display); color: var(--blue); letter-spacing: .04em; }
 .scanning .arc { animation: spin 1.6s linear infinite; }
@@ -222,6 +223,10 @@ canvas.monster.parade:nth-child(2n) { animation-delay: -.25s; }
 .btn.ghost { background: oklch(28% .025 252); }
 .btn:disabled { opacity: .38; cursor: default; }
 .btn.pressed { transform: translateY(3px); filter: brightness(1.35); }
+.coach-note { margin: 0; padding: 10px 12px; border-left: 5px solid var(--coral); background: white; color: var(--ink); font: 500 13px/1.4 var(--display); }
+.coach-note b { color: var(--blue); }
+.btn.coach, .zone.coach { outline: 4px solid var(--cyan); outline-offset: -4px; animation: coach-pulse .7s ease-in-out infinite alternate; }
+.mini-card.coach-card { box-shadow: inset 0 0 0 3px var(--coral), inset 7px 0 0 var(--coral); animation: coach-card .7s ease-in-out infinite alternate; }
 .mini-row { display: flex; justify-content: space-between; align-items: center; gap: 12px 24px; flex-wrap: wrap; min-height: 22px; }
 .mini-group { display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: center; }
 .mini { background: none; border: 0; padding: 2px 0; cursor: pointer; color: var(--light); font: 400 12px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
@@ -258,6 +263,8 @@ canvas.monster.parade:nth-child(2n) { animation-delay: -.25s; }
 
 @keyframes blink { 50% { opacity: .15; } }
 @keyframes pulse { to { transform: scale(1.12); } }
+@keyframes coach-pulse { to { filter: brightness(1.22); } }
+@keyframes coach-card { to { transform: translateX(5px); } }
 @keyframes bob { to { transform: translateY(-5px); } }
 @keyframes hurt { 50% { filter: brightness(2.4); transform: translateX(6px); } }
 @keyframes float-up { to { transform: translate(-50%, -140%); opacity: 0; } }
@@ -275,7 +282,7 @@ canvas.monster.parade:nth-child(2n) { animation-delay: -.25s; }
 }
 @keyframes ping { 50% { box-shadow: 0 0 0 13px oklch(68% .2 28 / 0); } }
 @media (prefers-reduced-motion: reduce) {
-  .blink, .mini.alert, .gear.max strong, canvas.monster.parade { animation: none !important; }
+  .blink, .mini.alert, .gear.max strong, canvas.monster.parade, .btn.coach, .zone.coach, .mini-card.coach-card { animation: none !important; }
   .stamp { animation: stamp-still 1.2s steps(1) forwards !important; transform: translate(-50%, -50%) rotate(-4deg); }
   .card { transition: opacity .2s; }
   .card.fly-archive, .card.fly-trash, .card.fly-star { transform: none; }

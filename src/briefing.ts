@@ -24,6 +24,8 @@ export interface BriefOptions {
   privacy: boolean;
   /** Mid-raid the briefing also decides the card's fate; after the raid it only writes drafts. */
   inRaid: boolean;
+  /** First-run demo coach: points at the rule-based recommendation without blocking choices. */
+  coach?: boolean;
   toast: (text: string, ms?: number) => void;
 }
 
@@ -38,6 +40,8 @@ export function openBriefing(o: BriefOptions): Promise<BriefResult> {
   // One-off senders are too often people: in privacy mode the sender is always hidden.
   const hide = (s: string) => (privacy ? redact(s) : esc(s));
   const lastFocus = document.activeElement as HTMLElement | null;
+  const stage = document.querySelector<HTMLElement>('#stage');
+  stage?.setAttribute('inert', '');
 
   const root = document.createElement('div');
   root.className = 'overlay';
@@ -69,6 +73,7 @@ export function openBriefing(o: BriefOptions): Promise<BriefResult> {
       isOpen = false;
       removeEventListener('keydown', onKey, true);
       root.remove();
+      stage?.removeAttribute('inert');
       lastFocus?.focus?.();
       resolve(r);
     };
@@ -86,10 +91,11 @@ export function openBriefing(o: BriefOptions): Promise<BriefResult> {
     const renderActions = () => {
       const rec = recommended();
       const btn = (key: string, label: string, action: string, cls = '') =>
-        `<button class="btn ${cls} ${rec === action ? 'primary rec' : ''}" data-brief="${action}"><kbd>${key}</kbd><span>${label}${rec === action ? ` <small>${t('brief.suggested')}</small>` : ''}</span></button>`;
+        `<button class="btn ${cls} ${rec === action ? `primary rec ${o.coach ? 'coach' : ''}` : ''}" data-brief="${action}"><kbd>${key}</kbd><span>${label}${rec === action ? ` <small>${t('brief.suggested')}</small>` : ''}</span></button>`;
       const canDraft = !!b?.replies.length;
       const canCal = b?.kind === 'meeting' || b?.kind === 'confirm';
       root.querySelector('.mission-actions')!.innerHTML = `
+        ${o.coach && b ? `<p class="coach-note">${t('tutorial.brief')}</p>` : ''}
         <div class="row brief-row">
           ${canDraft ? btn('S', o.inRaid ? t('brief.draftQuest') : t('brief.draft'), 'draft') : ''}
           ${o.inRaid ? btn('&rarr;', `${t('brief.quest')} &#9733;`, 'star', 'quest') : ''}
@@ -207,6 +213,15 @@ export function openBriefing(o: BriefOptions): Promise<BriefResult> {
       e.stopImmediatePropagation();
       const typing = e.target instanceof HTMLTextAreaElement;
       if (e.key === 'Escape') { e.preventDefault(); return run('back'); }
+      if (e.key === 'Tab') {
+        const focusable = [...root.querySelectorAll<HTMLElement>('button:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')]
+          .filter((el) => !el.hidden);
+        if (!focusable.length) { e.preventDefault(); return panel.focus(); }
+        const first = focusable[0], last = focusable.at(-1)!;
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); return last.focus(); }
+        if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); return first.focus(); }
+        return;
+      }
       if (typing) {
         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run('draft'); }
         return;

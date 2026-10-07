@@ -11,11 +11,12 @@ import './style.css';
 import { comboSfx, drainSfx, fanfare, isMuted, music, sfx, toggleMute, unlockAudio } from './audio';
 import { bindBoard } from './board';
 import { briefingOpen, openBriefing } from './briefing';
+import { isPerson } from './classifier';
 import { makeDial } from './dials';
 import { esc, redact } from './html';
 import { DemoSource } from './demoSource';
 import { GmailSource, preloadGoogle, signIn } from './gmailSource';
-import { burst, centreOf, flash, floatText, initFx, shake, stamp } from './fx';
+import { burst, centreOf, flash, floatText, initFx, settleParticles, shake, stamp } from './fx';
 import { fmt, lang, setLang, t } from './i18n';
 import { Raid, splitInbox, type BossMove, type Hit, type HordeMove } from './raid';
 import { recKeepGoing, recStart, recStopSoon } from './recorder';
@@ -67,20 +68,29 @@ const WHITE = '#f2f7fd';
 let privacy = false;
 try { privacy = localStorage.getItem('inbox-raid-privacy') === '1'; } catch { /* storage blocked */ }
 
-// A person is anyone without an unsubscribe header, but also anyone writing from a
-// personal mailbox or through a group or list (those add List-Unsubscribe too).
-const PERSONAL_DOMAINS = /@(gmail|googlemail|hotmail|outlook|live|msn|yahoo|ymail|icloud|me|aol|proton|protonmail|uol|bol|terra|ig|zipmail|gmx)\./i;
-const isPerson = (m: Mail) =>
-  !m.listUnsubscribe || PERSONAL_DOMAINS.test(m.fromEmail) || /\svia\s/i.test(m.fromName) || /@googlegroups\.com$/i.test(m.fromEmail);
-
 // How the horde is played: one card at a time (classic) or the drag and drop triage board.
 type PlayStyle = 'classic' | 'board';
-let style: PlayStyle = 'classic';
-try { if (localStorage.getItem('inbox-raid-style') === 'board') style = 'board'; } catch { /* storage blocked */ }
+let style: PlayStyle = 'board';
+try {
+  const saved = localStorage.getItem('inbox-raid-style');
+  if (saved === 'classic' || saved === 'board') style = saved;
+} catch { /* storage blocked */ }
 
 function setStyle(s: PlayStyle) {
   style = s;
   try { localStorage.setItem('inbox-raid-style', s); } catch { /* storage blocked */ }
+}
+
+type TutorialStep = 'boss' | 'board' | 'brief' | 'done';
+let tutorialStep: TutorialStep = 'done';
+
+function tutorialSeen(): boolean {
+  try { return localStorage.getItem('inbox-raid-tutorial-v1') === '1'; } catch { return false; }
+}
+
+function finishTutorial() {
+  tutorialStep = 'done';
+  try { localStorage.setItem('inbox-raid-tutorial-v1', '1'); } catch { /* storage blocked */ }
 }
 
 /** A sender name or address: hidden in privacy mode when it is a person. */
@@ -277,8 +287,9 @@ function showTitle() {
       ${best ? `<p class="best">${t('title.best')} <b>${fmt(best)}</b></p>` : ''}
     </section>`;
   controls.innerHTML = `
-    <div class="row">
+    <div class="row four">
       ${button('ENTER', t('title.demo'), 'demo', 'primary')}
+      ${button('F', t('title.demoFull'), 'demo-full')}
       ${button('G', t('title.gmail'), 'gmail')}
       ${button('P', privacy ? t('privacy.on') : t('privacy.off'), 'privacy', 'ghost')}
     </div>
@@ -309,6 +320,10 @@ function segments(n: number, id = ''): string {
 
 async function startRaid(src: InboxSource) {
   const run = ++runId;
+  tutorialStep = src instanceof DemoSource && src.preset === 'blitz' && style === 'board' && !tutorialSeen() ? 'boss' : 'done';
+  selectedId = '';
+  onBoard.clear();
+  document.body.classList.remove('dragging');
   layout('scan');
   scanning = src;
   screen.innerHTML = `
@@ -344,11 +359,12 @@ async function startRaid(src: InboxSource) {
   const outside = Math.max(0, src.inboxTotal - mails.length) + overflow;
   source = src;
   controls.innerHTML = '';
-  raid = new Raid(bosses, horde, outside);
+  raid = new Raid(bosses, horde, outside, style === 'board' ? 4000 : 2500);
   $('.brief.scan').innerHTML = `
     <p class="eyebrow">${src.isDemo ? t('scan.demo') : t('scan.gmail')}</p>
     <p class="scan-count">${fmt(raid.inboxStart)} <small>${t('scan.emails')}</small></p>
     <p class="found">${t('scan.found', { b: bosses.length, h: horde.length })}</p>
+    <p class="found plan">${t('scan.plan', { b: bosses.length, n: fmt(bosses.reduce((sum, boss) => sum + boss.mails.length, 0)), h: horde.length })}</p>
     ${outside ? `<p class="found dim">${t('scan.outside', { n: fmt(outside) })}</p>` : ''}
     <p class="ready blink">${t('scan.ready')}</p>`;
   shownInbox = raid.inboxStart;
@@ -404,6 +420,7 @@ function showBoss() {
       </div>
       <ul class="attacks" aria-label="${t('boss.attacks')}">${samples.map((s) => `<li>${what(s || t('horde.nosubject'))}</li>`).join('')}</ul>
       <p class="critical ${plan.kind === 'none' ? 'dim' : ''}"><span>${tag}</span></p>
+      ${tutorialStep === 'boss' && r.bossIdx === 0 ? `<p class="coach-note">${t('tutorial.boss', { n: fmt(hp) })}</p>` : ''}
     </section>`;
   controls.innerHTML = `
     <div class="row four">
@@ -414,6 +431,7 @@ function showBoss() {
     </div>
     ${utilityRow()}`;
   animateMonsters();
+  if (tutorialStep === 'boss' && r.bossIdx === 0) controls.querySelector('[data-action="unsubscribe"]')?.classList.add('coach');
   sfx('boss');
 }
 
@@ -432,6 +450,7 @@ async function bossMove(move: BossMove) {
   if (!boss) return;
   const src = source;
   const run = runId;
+  if (tutorialStep === 'boss') tutorialStep = 'board';
   let plan: UnsubPlan | undefined;
   let linkOnly = false;
   if (move === 'unsubscribe') {
@@ -471,8 +490,8 @@ async function bossMove(move: BossMove) {
     sprite.classList.add('dead');
     const crit = move === 'unsubscribe';
     sfx(crit ? 'boom' : move === 'trash' ? 'trash' : 'hit');
-    burst(x, y, crit ? BLUE : color, crit ? 90 : 50, crit ? 11 : 8, crit ? 9 : 7);
-    burst(x, y, WHITE, 20, 5, 4);
+    burst(x, y, crit ? BLUE : color, crit ? 72 : 50, crit ? 11 : 8, crit ? 9 : 7);
+    burst(x, y, WHITE, crit ? 16 : 20, 5, 4);
     shake(crit ? 18 : 10, crit ? 500 : 300);
     if (crit) flash(CYAN);
     if (hit.combo > 1) comboSfx(hit.combo);
@@ -489,6 +508,7 @@ async function bossMove(move: BossMove) {
   r.waited(performance.now() - t0);
   busy = false;
   if (r.phase === 'horde' && r.bossIdx === r.bosses.length && r.hordeIdx === 0) {
+    settleParticles();
     stamp(t('fx.horde'), CORAL);
     music.stop();
   }
@@ -577,7 +597,6 @@ async function landHit(hit: Hit, comboBefore: number, x: number, y: number, src:
 
 // ---------- triage board ----------
 
-const QUEUE_SHOWN = 5;
 /** Points for a reply draft saved from a briefing. */
 const DRAFT_POINTS = 300;
 /** The card the keyboard (and a tap on a zone) acts on. */
@@ -585,13 +604,19 @@ let selectedId = '';
 /** Cards already on the board, so only new arrivals slide in. */
 let onBoard = new Set<string>();
 
+function queueShown(): number {
+  if (matchMedia('(max-width: 700px)').matches) return 3;
+  if (matchMedia('(max-height: 760px)').matches) return 4;
+  return 5;
+}
+
 function showBoard() {
   const r = raid!;
   layout('horde');
   arena.classList.add('board');
   armedAt = performance.now() + ARM_CARD_MS;
   const left = r.horde.slice(r.hordeIdx);
-  const shown = left.slice(0, QUEUE_SHOWN);
+  const shown = left.slice(0, queueShown());
   if (!shown.some((m) => m.id === selectedId)) selectedId = shown[0]?.id ?? '';
   const zone = (id: string, key: string, label: string, sub: string, count: number) => `
     <button class="zone z-${id}" data-zone="${id}" data-action="${id === 'act' ? 'star' : id}">
@@ -602,18 +627,22 @@ function showBoard() {
   screen.innerHTML = `
     <section class="panel orbit queue">
       <p class="orbit-tag">${t('board.queue')} <b>${r.hordeIdx + 1} / ${r.horde.length}</b></p>
-      <ol class="queue-list">${shown.map((m) => miniCard(m, !onBoard.has(m.id))).join('')}</ol>
+      <ol class="queue-list" role="listbox" aria-label="${t('board.queue')}">${shown.map((m) => miniCard(m, !onBoard.has(m.id))).join('')}</ol>
       ${left.length > shown.length ? `<p class="queue-more">${t('board.more', { n: left.length - shown.length })}</p>` : ''}
     </section>
     <section class="panel brief zones">
       ${zone('archive', '&larr;', t('board.archive'), t('board.archive.sub'), r.stats.archived)}
       ${zone('trash', '&darr;', t('board.trash'), t('board.trash.sub'), r.stats.trashed)}
       ${zone('act', '&rarr;', `${t('board.act')} &#9733;`, t('board.act.sub'), r.stats.starred)}
-      <p class="fine board-hint">${t('board.hint')}</p>
+      <p class="fine board-hint">${tutorialStep === 'board' ? t('tutorial.board') : t('board.hint')}</p>
     </section>`;
   onBoard = new Set(shown.map((m) => m.id));
   controls.innerHTML = utilityRow();
   animateMonsters();
+  if (tutorialStep === 'board') {
+    screen.querySelector(`.mini-card[data-id="${CSS.escape(selectedId)}"]`)?.classList.add('coach-card');
+    screen.querySelector('[data-zone="act"]')?.classList.add('coach');
+  }
   bindBoard($('.queue-list'), [...screen.querySelectorAll<HTMLElement>('[data-zone]')], {
     canDrag: () => !busy && !needsAuth && performance.now() >= armedAt,
     tap: (card) => selectCard(card.dataset.id!),
@@ -623,7 +652,7 @@ function showBoard() {
 
 function miniCard(m: Mail, fresh: boolean): string {
   return `
-    <li class="mini-card ${m.id === selectedId ? 'sel' : ''} ${fresh ? 'enter' : ''}" data-id="${esc(m.id)}" tabindex="-1">
+    <li class="mini-card ${m.id === selectedId ? 'sel' : ''} ${fresh ? 'enter' : ''}" data-id="${esc(m.id)}" role="option" aria-selected="${m.id === selectedId}" tabindex="-1">
       ${monster(m.fromEmail, 'mini', colorFor(m.fromEmail))}
       <span class="mc-text"><b>${who(m.fromName, true)}</b><span>${what(m.subject || t('horde.nosubject'))}</span></span>
       <time>${ago(m.date)}</time>
@@ -632,7 +661,11 @@ function miniCard(m: Mail, fresh: boolean): string {
 
 function selectCard(id: string) {
   selectedId = id;
-  screen.querySelectorAll<HTMLElement>('.mini-card').forEach((c) => c.classList.toggle('sel', c.dataset.id === id));
+  screen.querySelectorAll<HTMLElement>('.mini-card').forEach((c) => {
+    const selected = c.dataset.id === id;
+    c.classList.toggle('sel', selected);
+    c.setAttribute('aria-selected', String(selected));
+  });
   sfx('tick');
 }
 
@@ -646,6 +679,10 @@ function selectNext() {
 async function boardAct(move: HordeMove, id: string, dragged = false) {
   const r = raid!;
   if (!r.horde.slice(r.hordeIdx).some((m) => m.id === id)) return;
+  if (tutorialStep === 'board') {
+    if (move === 'star') tutorialStep = 'brief';
+    else finishTutorial();
+  }
   if (move === 'star') return openAct(id, dragged);
   boardMove(move, id, dragged);
 }
@@ -681,10 +718,15 @@ async function openAct(id: string, dragged: boolean) {
   const run = runId;
   busy = true;
   const t0 = performance.now();
-  const res = await openBriefing({ mail, source, person: isPerson(mail), privacy, inRaid: true, toast });
+  const coached = tutorialStep === 'brief';
+  const res = await openBriefing({ mail, source, person: isPerson(mail), privacy, inRaid: true, coach: coached, toast });
   if (run !== runId || raid !== r) return;
   r.paused(performance.now() - t0);
   busy = false;
+  if (coached) {
+    if (res.move) finishTutorial();
+    else tutorialStep = 'board';
+  }
   if (res.authExpired) {
     needsAuth = true;
     toast(t('toast.expired'), 4000);
@@ -926,7 +968,8 @@ function act(action: string) {
   if (busy) return;
   switch (view) {
     case 'title':
-      if (action === 'demo') { sfx('select'); startRaid(new DemoSource()); }
+      if (action === 'demo') { sfx('select'); startRaid(new DemoSource('blitz')); }
+      if (action === 'demo-full') { sfx('select'); startRaid(new DemoSource('full')); }
       if (action === 'gmail' && !signingIn) raidGmail();
       if (action === 'privacy') { togglePrivacy(); showTitle(); }
       if (action.startsWith('style')) {
@@ -969,7 +1012,7 @@ function act(action: string) {
           .catch((err) => { console.error(err); toast(t('toast.cardFail')); })
           .finally(() => { makingCard = false; });
       }
-      if (action === 'again') startRaid(source.isDemo ? new DemoSource() : source);
+      if (action === 'again') startRaid(source instanceof DemoSource ? new DemoSource(source.preset) : source);
       if (action === 'title') showTitle();
       return;
   }
@@ -1024,7 +1067,7 @@ async function reconnect() {
 }
 
 const KEYS: Record<string, Record<string, string>> = {
-  title: { Enter: 'demo', ' ': 'demo', g: 'gmail', p: 'privacy', t: 'style' },
+  title: { Enter: 'demo', ' ': 'demo', f: 'demo-full', g: 'gmail', p: 'privacy', t: 'style' },
   boss: { a: 'archive', u: 'unsubscribe', d: 'trash', s: 'spare', ArrowLeft: 'archive', ArrowDown: 'trash', Escape: 'quit', g: 'reauth', p: 'privacy' },
   horde: { ArrowLeft: 'archive', a: 'archive', ArrowDown: 'trash', d: 'trash', ArrowRight: 'star', s: 'star', ArrowUp: 'next', Escape: 'quit', g: 'reauth', p: 'privacy' },
   scan: { Escape: 'quit' },

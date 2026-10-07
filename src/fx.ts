@@ -34,6 +34,11 @@ export function burst(x: number, y: number, color: string, count = 24, speed = 6
   loop();
 }
 
+/** Lets a big kill finish without veiling the next decision screen. */
+export function settleParticles(frames = 10) {
+  for (const p of parts) p.max = Math.min(p.max, p.life + frames);
+}
+
 /** Centre of an element, in CSS pixels. */
 export function centreOf(el: Element): [number, number] {
   const r = el.getBoundingClientRect();

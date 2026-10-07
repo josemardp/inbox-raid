@@ -101,6 +101,19 @@ const HORDE: [string, string, string, string][] = [
   ['Hackyard', 'hello@hackyard.example', 'Yard #4 kicks off now', 'Build solo, any AI model. Ship by Friday.'],
 ];
 
+export type DemoPreset = 'blitz' | 'full';
+
+/** The short demo reaches every distinctive mechanic before a voter can lose interest. */
+const BLITZ_HORDE = [
+  'invoice@totally-legit.example',
+  'calendar@work.example',
+  'tom@street.example',
+  'billing@powerco.example',
+  'hello@hackyard.example',
+  'tickets@city.example',
+  'welcome@unknown.example',
+];
+
 // The full text of some horde emails, for the quest briefing. The rest show their preview.
 const BODIES: Record<string, string> = {
   'karen@work.example': 'Hi,\n\nCan you jump on a call in 5? It is urgent but also not really. I need the Q3 numbers before the meeting on Thursday at 10am.\n\nCould you send me the latest version of the spreadsheet?\n\nKaren',
@@ -131,11 +144,15 @@ function rng(seed: number) {
 
 const DAY = 86_400_000;
 
-export function buildDemoInbox(now = Date.now()): Mail[] {
+export function buildDemoInbox(now = Date.now(), preset: DemoPreset = 'full'): Mail[] {
   const rand = rng(4);
   const mails: Mail[] = [];
   let n = 0;
-  for (const b of BOSSES) {
+  const bosses = preset === 'blitz' ? BOSSES.slice(0, 2) : BOSSES;
+  const horde = preset === 'blitz'
+    ? BLITZ_HORDE.map((email) => HORDE.find((h) => h[1] === email)!).filter(Boolean)
+    : HORDE;
+  for (const b of bosses) {
     for (let i = 0; i < b.count; i++) {
       mails.push({
         id: `demo-${n++}`,
@@ -149,10 +166,11 @@ export function buildDemoInbox(now = Date.now()): Mail[] {
       });
     }
   }
-  HORDE.forEach(([name, email, subject, snippet]) => {
+  horde.forEach(([name, email, subject, snippet], i) => {
     mails.push({
       id: `demo-${n++}`, fromName: name, fromEmail: email, subject, snippet,
-      date: now - Math.floor(rand() * 20 * DAY),
+      // Blitz order is authored: scam -> meeting -> person -> bill -> quick calls.
+      date: preset === 'blitz' ? now - (i + 1) * 60_000 : now - Math.floor(rand() * 20 * DAY),
     });
   });
   return mails.sort((a, b) => b.date - a.date);

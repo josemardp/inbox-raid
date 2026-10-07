@@ -105,7 +105,12 @@ export class Raid {
    * `outside` = emails still in the inbox that this raid does not fight (not scanned, or
    * past the horde limit). They count in the inbox total, so INBOX ZERO is never a lie.
    */
-  constructor(readonly bosses: Boss[], readonly horde: Mail[], readonly outside = 0) {
+  constructor(
+    readonly bosses: Boss[],
+    readonly horde: Mail[],
+    readonly outside = 0,
+    private readonly hordeComboWindowMs = COMBO_WINDOW_MS,
+  ) {
     this.inboxStart = this.inboxLeft = bosses.reduce((s, b) => s + b.mails.length, 0) + horde.length + outside;
     this.phase = bosses.length ? 'boss' : horde.length ? 'horde' : 'done';
   }
@@ -178,7 +183,7 @@ export class Raid {
     const mail = this.mail;
     if (!mail) return null;
     const snap = this.snapshot(null);
-    const combo = this.bumpCombo();
+    const combo = this.bumpCombo(this.hordeComboWindowMs);
     const points = (move === 'star' ? 50 : 100) * combo;
     if (move === 'archive') this.stats.archived++;
     else if (move === 'trash') this.stats.trashed++;
@@ -247,9 +252,11 @@ export class Raid {
     return false;
   }
 
-  private bumpCombo(): number {
+  private bumpCombo(windowMs = COMBO_WINDOW_MS): number {
     const now = performance.now();
-    this.combo = now - this.lastActionAt < COMBO_WINDOW_MS ? Math.min(MAX_COMBO, this.combo + 1) : 1;
+    this.combo = this.lastActionAt > 0 && now - this.lastActionAt < windowMs
+      ? Math.min(MAX_COMBO, this.combo + 1)
+      : 1;
     this.lastActionAt = now;
     this.stats.maxCombo = Math.max(this.stats.maxCombo, this.combo);
     return this.combo;

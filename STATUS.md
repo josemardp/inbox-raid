@@ -1,8 +1,16 @@
 # STATUS: INBOX RAID
 
-Atualizado: 07/10/2026, ~13:25 (quarta, dia 3 do Hackyard).
-**Onde paramos:** **Speedrun ENTREGUE** em 07/10 ~13:23 (aparece na página da Yard #4 como @josemardp). Vídeo público no YouTube: https://youtu.be/3pmce3kaHck (canal "Melinda Show" da conta lojadares, por escolha do Josemar). Jogo com visual V2, bilíngue e som novo (sem chiado).
-**Para retomar:** ler este arquivo. Próximo passo: decidir se melhora algo para a entrega final (sexta 09/10 15:00); reenviar substitui a entrega atual.
+Atualizado: 07/10/2026, ~14:50 (quarta, dia 3 do Hackyard).
+**Onde paramos:** candidato da entrega final pronto para publicação. Speedrun entregue em 07/10 ~13:23; vídeo público: https://youtu.be/3pmce3kaHck.
+**Para retomar:** conferir o deploy do Pages e decidir se reenvia a entrega final; reenviar substitui a atual.
+
+## Candidato final do Hackyard (07/10 ~14:50)
+- **Demo Rápida · 45s:** 245 e-mails, dois chefões (142 + 96) e sete decisões com ordem narrativa; a Raid Completa continua disponível.
+- **Primeiros 30 segundos:** resumo do poder antes da luta, tutorial contextual U → AGIR → recomendação segura, Mesa de Triagem como padrão para visitantes novos.
+- **Ritmo e impacto:** menos partículas cobrindo a próxima tela, fila responsiva (3 cartões no celular), janela de combo da Mesa em 4s e Clássico em 2,5s; a primeira ação agora sempre começa em x1.
+- **Confiança:** classificador conservador separa pessoas de endereços funcionais; Prompt API local só é oferecida no idioma oficialmente suportado pelo jogo; modal com foco preso e fundo inerte.
+- **Validado:** `npm test` com 47 testes, `npm run build`, partidas completas na Demo Rápida em Mesa (40s) e Clássico (18s), teclado, 390x844, PT/EN e nenhum aviso/erro no console.
+- Sem servidor, sem escopo OAuth novo e sem mudar as garantias de desfazer/nunca enviar e-mail.
 
 ## Onde estamos
 - **Jogo no ar:** https://josemardp.github.io/inbox-raid/ (commit `f546204` e seguintes).
@@ -46,7 +54,7 @@ Atualizado: 07/10/2026, ~13:25 (quarta, dia 3 do Hackyard).
 - Enviado: repo, vídeo https://youtu.be/3pmce3kaHck, modelo "Claude Opus 5.5" (editor/coding agent), print do chefão Cloudflare, e este texto (444 caracteres):
 > INBOX RAID turns inbox cleanup into an arcade raid. Senders who flood you become bosses whose HP is their email count; every hit really archives, trashes or unsubscribes in Gmail, and Z undoes it in Gmail too. Then a horde of single emails rewards fast calls with combos. Runs 100% in the browser, no server, in English and Portuguese. Play the no-login demo; the video shows a real inbox going to zero. Built solo with Claude Code for Yard #4.
 
-## Em andamento (07/10 tarde): Mesa de Triagem + Briefing da missão
+## Concluído (07/10 tarde): Mesa de Triagem + Briefing da missão
 - **No ar desde 07/10 ~14:05** (commit `e53f1f5`, deploy do Pages conferido).
 - Na tela inicial o jogador escolhe o estilo da horda (tecla `T`): **Clássico** (o do vídeo, intacto) ou **Mesa de Triagem** (minicartões à esquerda, arrastar para ARQUIVAR / LIXEIRA / AGIR; `↑` escolhe o cartão, setas enviam).
 - **AGIR abre o briefing:** texto completo (só desse e-mail, lido na hora), tipo detectado (golpe, conta, confirmação, reunião, pedido, pergunta, pessoal, informativo), pistas (datas, valores, links), dica de ação e resposta sugerida com 3 tons (sim, depois, não) no idioma do e-mail. Botões: salvar rascunho + missão (+300 pontos), missão, arquivar, lixeira, pôr na agenda (abre o Google Agenda preenchido). O relógio para enquanto o briefing está aberto.

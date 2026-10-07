@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { buildDemoInbox } from '../src/demoInbox';
 import { Raid, splitInbox } from '../src/raid';
 import type { Mail } from '../src/types';
 
@@ -8,6 +9,13 @@ const mail = (fromEmail: string, extra: Partial<Mail> = {}): Mail => ({
 });
 
 describe('splitInbox', () => {
+  it('the blitz demo reaches two bosses and seven authored horde calls', () => {
+    const { bosses, horde, overflow } = splitInbox(buildDemoInbox(1_800_000, 'blitz'));
+    expect(bosses.map((b) => b.mails.length)).toEqual([142, 96]);
+    expect(horde).toHaveLength(7);
+    expect(horde[0].fromEmail).toBe('invoice@totally-legit.example');
+    expect(overflow).toBe(0);
+  });
   it('turns senders with 3+ emails into bosses, biggest first', () => {
     const mails = [
       ...Array.from({ length: 3 }, () => mail('small@x.com')),
@@ -77,6 +85,24 @@ describe('Raid', () => {
     (r as unknown as { idleSince: number }).idleSince = performance.now() - 60_000;
     r.tick(8000);
     expect(r.stress).toBeLessThanOrEqual(1.2 + 1e-9);
+  });
+
+  it('gives the deliberate triage board a longer combo window', () => {
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(10_000);
+    try {
+      const r = new Raid([], [mail('a@x.com'), mail('b@x.com')], 0, 4000);
+      r.hitMail('archive');
+      clock.mockReturnValue(13_500);
+      expect(r.hitMail('archive')!.combo).toBe(2);
+
+      clock.mockReturnValue(20_000);
+      const classic = new Raid([], [mail('c@x.com'), mail('d@x.com')]);
+      classic.hitMail('archive');
+      clock.mockReturnValue(23_500);
+      expect(classic.hitMail('archive')!.combo).toBe(1);
+    } finally {
+      clock.mockRestore();
+    }
   });
 });
 

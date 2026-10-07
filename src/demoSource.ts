@@ -1,4 +1,4 @@
-import { buildDemoInbox, demoBody } from './demoInbox';
+import { buildDemoInbox, demoBody, type DemoPreset } from './demoInbox';
 import type { ActionKind, InboxSource, Mail, MailBody, UnsubPlan, UnsubResult } from './types';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -10,8 +10,10 @@ export class DemoSource implements InboxSource {
   readonly inboxUrl = '';
   inboxTotal = 0;
 
+  constructor(readonly preset: DemoPreset = 'blitz') {}
+
   async load(onProgress: (loaded: number, total: number) => void): Promise<Mail[]> {
-    const mails = buildDemoInbox();
+    const mails = buildDemoInbox(Date.now(), this.preset);
     this.inboxTotal = mails.length;
     // Fake a scan so the counter has something to do.
     for (let i = 0; i <= mails.length; i += 23) {

@@ -19,12 +19,15 @@ Built for **Hackyard Yard #4: Gamification** (Oct 5 to 9, 2026). The rule of the
 
 `M` sound, `P` privacy mode, `L` English / Portuguese (it follows your browser language), `Esc` quit. On a phone, tap the buttons or swipe the card. When the raid ends, `C` saves a share card with your numbers (no subjects, no names).
 
-## Two ways to play
+## Ways to play
 
-- **Demo:** a fake (and painfully familiar) inbox. No login, ten seconds to start.
+- **Quick demo:** a hand-authored 45-second run through two giant bosses, a scam briefing and seven meaningful calls. No login.
+- **Full raid:** the larger fake (and painfully familiar) inbox, kept for players who want the complete score chase.
 - **Raid my Gmail:** every hit is a real action on your mailbox.
   - The Google app is still in testing, so **real mode only works for invited accounts** for now. Everyone else gets the demo.
   - Google's consent screen asks for `gmail.modify`: read, label and send. It cannot permanently delete anything. *Send* is used for one thing only: unsubscribing from senders that only accept unsubscribe by email. That email always says just "unsubscribe", goes only to an address on the sender's own site, and the address is shown before you press `U`.
+
+The horde has two styles. **Classic** deals one big card at a time; **Triage Board** lets you drag a queue into Archive, Trash or Act. Act opens a mission briefing with the full email, locally detected clues, a safe recommendation and suggested replies. It may save a Gmail draft, but it never sends one.
 
 ## Safety first
 

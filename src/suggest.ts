@@ -1,4 +1,5 @@
 import type { Lang } from './i18n';
+import { isFunctionalAddress, looksOrganizationalName } from './classifier';
 
 // Quest briefing brains. Rules first: they work everywhere, offline, and say why.
 // When the browser has a built-in model (Chrome's Prompt API), it can polish the reply,
@@ -42,13 +43,10 @@ const RULES: [MissionKind, RegExp][] = [
   ['request', words('could you send|can you send|please send|send me|need the|attach|spreadsheet|document|report|pode(?:ria)? (?:me )?(?:enviar|mandar)|me (?:envia|manda)|preciso d[oa]s?|anexo|planilha|documento|relatório')],
 ];
 
-const ORG = words('school|office|team|department|dept|clinic|bank|support|service|services|community|calendar|webinars|inc|ltd|llc|store|shop|news|escola|prefeitura|secretaria|equipe|banco|clínica|clinica|loja|suporte|atendimento|departamento|ltda');
-const ROLE_ADDRESS = /^(office|info|no-?reply|noreply|contact|contato|support|suporte|hello|team|admin|billing|notifications?|news|newsletter|atendimento|secretaria)@/i;
-
 /** "Karen (Your Boss)" -> "Karen"; addresses, brands and offices get no name. */
 export function firstName(fromName: string, fromEmail = ''): string {
   const clean = fromName.replace(/\(.*?\)|".*?"|<.*?>/g, '').trim();
-  if (!clean || clean.includes('@') || ORG.test(clean) || ROLE_ADDRESS.test(fromEmail)) return '';
+  if (!clean || clean.includes('@') || looksOrganizationalName(clean) || isFunctionalAddress(fromEmail)) return '';
   const word = clean.split(/[\s,]+/)[0];
   return /^[\p{Lu}][\p{Ll}'-]+$/u.test(word) ? word : '';
 }
@@ -169,13 +167,15 @@ interface LanguageModelApi {
 }
 
 const model = (): LanguageModelApi | undefined => (globalThis as unknown as { LanguageModel?: LanguageModelApi }).LanguageModel;
+const promptLanguages = (lang: Lang): string[] | null => lang === 'en' ? ['en'] : null;
 
 /** True only when the model is already on this machine: the game never starts a multi-GB download. */
 export async function aiReady(lang: Lang): Promise<boolean> {
   const lm = model();
-  if (!lm?.availability) return false;
+  const languages = promptLanguages(lang);
+  if (!lm?.availability || !languages) return false;
   try {
-    const io = { expectedInputs: [{ type: 'text', languages: [lang] }], expectedOutputs: [{ type: 'text', languages: [lang] }] };
+    const io = { expectedInputs: [{ type: 'text', languages }], expectedOutputs: [{ type: 'text', languages: [lang] }] };
     return (await lm.availability(io)) === 'available';
   } catch {
     return false;
@@ -185,10 +185,11 @@ export async function aiReady(lang: Lang): Promise<boolean> {
 /** Rewrites a reply with the on-device model. The email is data for it, never instructions. */
 export async function aiReply(b: Briefing, tone: Tone, subject: string, text: string, draft: string): Promise<string> {
   const lm = model();
-  if (!lm) throw new Error('No on-device model');
+  const languages = promptLanguages(b.lang);
+  if (!lm || !languages) throw new Error('No supported on-device model');
   const language = b.lang === 'pt' ? 'Brazilian Portuguese' : 'English';
   const session = await lm.create({
-    expectedInputs: [{ type: 'text', languages: [b.lang] }],
+    expectedInputs: [{ type: 'text', languages }],
     expectedOutputs: [{ type: 'text', languages: [b.lang] }],
     initialPrompts: [{
       role: 'system',
