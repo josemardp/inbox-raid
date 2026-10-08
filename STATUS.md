@@ -1,9 +1,10 @@
 # STATUS: INBOX RAID
 
 Atualizado: 07/10/2026, fim da tarde (quarta, dia 3 do Hackyard).
-**Onde paramos:** candidato final refinado, com personalidade e medalhas na Demo e correções de segurança na triagem. Speedrun entregue em 07/10 ~13:23; vídeo público: https://youtu.be/3pmce3kaHck.
-**Vídeo v2 ENTREGUE (07/10 ~17:48):** https://youtu.be/i9Tuw2jvGFg (público, canal Melinda Show/lojadares; a versão anterior kkd659QDP_A ficou não listada por ter um estrondo falso no fundo musical), 1:37. Parte 1: Demo Rápida (fala, crítico, medalhas, mesa de triagem, briefing com resposta sugerida, rascunho, combo x8, INBOX ZERO). Parte 2: Gmail real da josemardp com privacidade (202 -> 0, desfazer, rascunho real). Entrega do Hackyard substituída com o link novo e texto de 477 caracteres. Rascunho criado na gravação apagado; caixa devolvida ao estado original (8 e-mails do dia na caixa, 271 na Lixeira, nenhuma estrela). Arquivo: Downloadsinbox-raid-demo-video-v2.mp4. Editor: tools/video/edit2.mjs (duas gravações).
-**Vídeo v3 PUBLICADO e ENTREGUE (07/10 ~20:53):** https://youtu.be/-jJ5-WoG9sw (público, Melinda Show/lojadares), 1:25. Entrega do Hackyard aponta para ele. v2 (i9Tuw2jvGFg e kkd659QDP_A) ficaram não listadas; 3pmce3kaHck (speedrun) segue público. Gancho com o 202 -> 0 real, demo sem login, Gmail real com privacidade, prova (caixa vazia e rascunho), URL grande. Descrição honesta no YouTube (194 restaurados da Lixeira, modo Gmail só para convidados). Arquivo: Downloadsinbox-raid-demo-video-v3.mp4. Editor: tools/video/edit3.mjs.
+**Onde paramos:** candidato final refinado, com personalidade e medalhas na Demo e correções de segurança na triagem. Speedrun entregue em 07/10 ~13:23 (vídeo 3pmce3kaHck, já excluído).
+**Vídeos antigos excluídos (08/10):** 3pmce3kaHck (speedrun), kkd659QDP_A e i9Tuw2jvGFg (v2) foram apagados do canal. Só a v3 (-jJ5-WoG9sw) continua no YouTube.
+**Vídeo v2 (07/10 ~17:48, hoje excluído do YouTube):** 1:37. Parte 1: Demo Rápida (fala, crítico, medalhas, mesa de triagem, briefing com resposta sugerida, rascunho, combo x8, INBOX ZERO). Parte 2: Gmail real da josemardp com privacidade (202 -> 0, desfazer, rascunho real). Entrega do Hackyard substituída com o link novo e texto de 477 caracteres. Rascunho criado na gravação apagado; caixa devolvida ao estado original (8 e-mails do dia na caixa, 271 na Lixeira, nenhuma estrela). Arquivo: Downloads\inbox-raid-demo-video-v2.mp4. Editor: tools/video/edit2.mjs (duas gravações).
+**Vídeo v3 PUBLICADO e ENTREGUE (07/10 ~20:53):** https://youtu.be/-jJ5-WoG9sw (público, Melinda Show/lojadares), 1:25. Entrega do Hackyard aponta para ele. É o único vídeo do projeto no canal. Gancho com o 202 -> 0 real, demo sem login, Gmail real com privacidade, prova (caixa vazia e rascunho), URL grande. Descrição honesta no YouTube (194 restaurados da Lixeira, modo Gmail só para convidados). Arquivo: Downloads\inbox-raid-demo-video-v3.mp4. Editor: tools/video/edit3.mjs.
 **Auditoria do commit a7777db (Claude, 07/10):** aprovado sem bloqueadores. Corrigido em seguida: a medalha Caixa Zero só aparece (tela final e cartão PNG) enquanto a caixa estiver de fato zerada; letras da tela final em 1280x720 voltaram a no mínimo 10 px; amarelo das medalhas virou o token --gold. Combo x8 é alcançável na Demo Rápida (o combo dos chefões continua na horda).
 **Para retomar:** missão concluída em 08/10. Entrega final já feita com a v3 (prazo sex 09/10 15:00); deploy do Pages ok. Só reenviar se surgir melhoria (reenviar substitui a atual).
 
@@ -39,8 +40,8 @@ Atualizado: 07/10/2026, fim da tarde (quarta, dia 3 do Hackyard).
 - Conferido: 1280x720, 1920x1080, 390x844 e 360x640, partida inteira sem erro no console, `npm test` 31 passando.
 - Correções de hoje: carimbo "MAX COMBO" só uma vez, barra de rolagem que piscava com o tremor da tela, título cabendo em 720 de altura, celular baixo com os botões sempre visíveis.
 
-## Vídeo (pronto)
-- **No YouTube (público):** https://youtu.be/3pmce3kaHck
+## Vídeo v1, speedrun (histórico)
+- **No YouTube:** excluído em 08/10 (era https://youtu.be/3pmce3kaHck).
 - **Arquivo:** `C:\Users\pc\Downloads\inbox-raid-demo-video.mp4` (1:50, 1920x1080, 30 fps, som do jogo já sem chiado e no volume do YouTube). Só nesta máquina (notebook atual); não vai para o git (21 MB).
 - **Conteúdo, em inglês:**
   1. Gmail real com 194 e-mails (assuntos desfocados).
@@ -61,7 +62,7 @@ Atualizado: 07/10/2026, fim da tarde (quarta, dia 3 do Hackyard).
   1. Restaurar os e-mails.
   2. `node tools/video/raid-bot.mjs --mode gmail --out <pasta> --plan <plano.json> --profile C:\Users\pc\.claude-browser\perfil-josemardp`.
   3. `node tools/video/base.mjs <pasta>`, depois `node tools/video/edit.mjs <pasta>`.
-  - Plano e scripts de restaurar/limpar ficam em `.playwright-mcp/` (fora do git, só nesta máquina).
+  - Os scripts de restaurar/limpar e o plano ficavam em `.playwright-mcp/` (fora do git) e foram apagados em 08/10 a pedido do Josemar. Para regravar, refazer o passo 1.
 
 ## Entrega no Hackyard (FEITA em 07/10, autorizada pelo Josemar)
 - Campos: repo (obrigatório), vídeo, texto até 500 caracteres, modelo de IA (Claude Code), recibo opcional. Entregar de novo substitui a entrega anterior.
@@ -81,7 +82,7 @@ Atualizado: 07/10/2026, fim da tarde (quarta, dia 3 do Hackyard).
 
 ## Próximo passo
 1. Até sexta 09/10 15:00 (meta 12:00): entrega final. A atual já vale; reenviar só se houver melhoria (ideias: legenda "194 real emails" em vez de "in my inbox", GIF do modo real no README).
-2. Pendente sem pressa: os scripts de restaurar/limpar a caixa e o plano da partida estão só em `.playwright-mcp/` desta máquina.
+2. Nada pendente. `.playwright-mcp/` foi apagada em 08/10.
 
 ## Decisões e dados fixos
 - Plano completo: [docs/PLANO.md](docs/PLANO.md).
