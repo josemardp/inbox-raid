@@ -1,6 +1,7 @@
 import { ZZFX, zzfx } from 'zzfx';
 import { BPM, makeNoise, playStep, type Level, type Section, type Voices } from './score';
 
+const NO_MUSIC = new URLSearchParams(location.search).has('nomusic');
 const OPEN_HZ = 14000;
 const CLOSED_HZ = 900;
 
@@ -114,6 +115,8 @@ class Music {
   get bpm() { return BPM[this.section]; }
 
   start(section = this.section) {
+    // ?nomusic: effects only, for a video that brings its own soundtrack.
+    if (NO_MUSIC) return;
     if (this.timer && section !== this.section) this.stop();
     this.section = section;
     if (muted || this.timer) return;
