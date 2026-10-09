@@ -107,7 +107,7 @@ export function openBriefing(o: BriefOptions): Promise<BriefResult> {
           ${btn('ESC', t('brief.back'), 'back', 'ghost')}
         </div>
         ${!o.inRaid && b && !b.replies.length ? `<p class="brief-note">${t('brief.noReply')}</p>` : ''}
-        <p class="fine">${o.source.isDemo ? `${t('brief.demo')} ` : ''}${t('brief.never')}</p>`;
+        ${canDraft ? `<p class="fine">${o.source.isDemo ? t('brief.demo') : t('brief.never')}</p>` : ''}`;
     };
 
     const renderSide = async () => {

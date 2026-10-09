@@ -92,6 +92,9 @@ canvas.monster.parade:nth-child(2n) { animation-delay: -.25s; }
 }
 .boss-taunt::before { content: ''; position: absolute; left: 24px; top: -9px; border: 10px solid transparent; border-bottom-color: white; border-top: 0; }
 .boss-sprite.hurt { animation: hurt .12s steps(2) infinite; }
+/* Hesitate and the boss lunges at you. */
+.boss-sprite.lunge { animation: lunge .38s ease-out; }
+.boss-taunt.again { animation: taunt-in .25s ease-out; }
 .boss-sprite.dead, .card-sprite.dead { transform: scale(1.5); opacity: 0; }
 .boss-sprite.walk-off { transform: translateX(120%); opacity: .3; transition: transform .45s ease-in, opacity .45s; }
 
@@ -211,6 +214,17 @@ canvas.monster.parade:nth-child(2n) { animation-delay: -.25s; }
 .quests li b { font-weight: 500; }
 .quests li .redact { height: 11px; }
 .quests .dim { color: var(--muted); }
+/* Report: how many horde calls matched the safe recommendation, and what may need a second look. */
+.calls, .missed { display: grid; gap: 6px; }
+.calls .hp-label b { color: var(--ink); }
+.calls .hp-label span { color: var(--muted); text-transform: none; letter-spacing: 0; }
+.calls-bar { height: 12px; }
+.calls-bar i { background: var(--gold); }
+.missed ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font: 400 13px var(--mono); }
+.missed li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--coral); }
+.missed li b { font-weight: 500; color: var(--ink); }
+.missed li .redact { height: 11px; }
+.missed .dim { color: var(--muted); }
 .proof { margin: 0; font: 400 15px var(--display); color: var(--muted); }
 .proof a { color: var(--blue); font-weight: 700; }
 
@@ -288,6 +302,7 @@ body.hit-stop #stage * { animation-play-state: paused !important; }
 @keyframes taunt-in { from { transform: translateY(10px) scale(.92); opacity: 0; } }
 @keyframes badge-pop { 0% { transform: translateX(120%); } 10%, 82% { transform: translateX(0); } 100% { transform: translateX(120%); } }
 @keyframes bob { to { transform: translateY(-5px); } }
+@keyframes lunge { 35% { transform: scale(1.14) translateY(8px); filter: brightness(1.5); } }
 @keyframes hurt { 50% { filter: brightness(2.4); transform: translateX(6px); } }
 @keyframes float-up { to { transform: translate(-50%, -140%); opacity: 0; } }
 @keyframes stamp {
@@ -304,7 +319,7 @@ body.hit-stop #stage * { animation-play-state: paused !important; }
 }
 @keyframes ping { 50% { box-shadow: 0 0 0 13px oklch(68% .2 28 / 0); } }
 @media (prefers-reduced-motion: reduce) {
-  .blink, .mini.alert, .gear.max strong, canvas.monster.parade, .btn.coach, .zone.coach, .mini-card.coach-card { animation: none !important; }
+  .blink, .mini.alert, .gear.max strong, canvas.monster.parade, .btn.coach, .zone.coach, .mini-card.coach-card, .boss-sprite.lunge { animation: none !important; }
   .stamp { animation: stamp-still 1.2s steps(1) forwards !important; transform: translate(-50%, -50%) rotate(-4deg); }
   .badge-pop { animation: badge-pop-still 2.4s steps(1) forwards !important; }
   .card { transition: opacity .2s; }
@@ -338,7 +353,9 @@ body.hit-stop #stage * { animation-play-state: paused !important; }
   .report .stats div { padding: 7px 9px; }
   .report .stats dt { margin-bottom: 4px; font-size: 10px; }
   .report .stats dd { font-size: 20px; }
-  .report .badges, .report .quests { gap: 3px; }
+  .report .badges, .report .quests, .report .calls, .report .missed { gap: 3px; }
+  .report .missed ul { gap: 2px; font-size: 11px; }
+  .report .calls-bar { height: 10px; }
   .report .badges li { padding: 3px 6px; font-size: 10px; }
   .report .quests ul { gap: 2px; font-size: 11px; }
   .report .quests .drafts.dim { display: none; }
@@ -392,6 +409,26 @@ body.hit-stop #stage * { animation-play-state: paused !important; }
   .mini { font-size: 10px; letter-spacing: .06em; }
   .fine { font-size: 11px; }
   .stamp { font-size: 26px; padding: 8px 16px; }
+}
+
+/* ---------- phones: the play buttons stay in reach on the title screen ---------- */
+.phone-only { display: none; }
+@media (max-width: 700px) {
+  body[data-view="title"] #arena.wide { grid-template-rows: 150px auto; }
+  body[data-view="title"] canvas.monster.hero { width: min(46cqmin, 96px); }
+  body[data-view="title"] .parade-row { display: none; }
+  body[data-view="title"] .brief.title { padding-bottom: 20px; }
+  body[data-view="title"] .phone-only { display: block; color: var(--muted); }
+  body[data-view="title"] #controls {
+    position: sticky; bottom: 0; z-index: 5;
+    margin: 0 -8px -8px; padding: 8px 8px 10px;
+    background: linear-gradient(to top, var(--void) 82%, transparent);
+  }
+  body[data-view="title"] #controls .mini-row .fine { display: none; }
+}
+/* A phone has no keyboard: the key letters on the small buttons are noise there. */
+@media (pointer: coarse) {
+  .mini kbd { display: none; }
 }
 
 /* ---------- short phones: the action buttons must stay on screen ---------- */

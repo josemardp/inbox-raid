@@ -1,3 +1,4 @@
+import type { Verdict } from './calls';
 import type { ActionKind, Mail } from './types';
 
 export type BossStatus = 'alive' | 'archived' | 'trashed' | 'unsubscribed' | 'spared';
@@ -13,7 +14,7 @@ export interface Boss {
 export type Phase = 'boss' | 'horde' | 'done';
 export type BossMove = 'archive' | 'trash' | 'unsubscribe' | 'spare';
 export type HordeMove = 'archive' | 'trash' | 'star';
-export type BadgeId = 'critical' | 'combo' | 'zero';
+export type BadgeId = 'critical' | 'combo' | 'zero' | 'eagle';
 
 export interface Stats {
   archived: number;
@@ -25,6 +26,9 @@ export interface Stats {
   maxCombo: number;
   /** Reply drafts written from a quest briefing (never sent by the game). */
   drafts: number;
+  /** Horde calls made, and how many matched the safe recommendation. */
+  calls: number;
+  sharp: number;
 }
 
 /** What one hit did, so the UI can animate it and the source can apply it. */
@@ -35,10 +39,16 @@ export interface Hit {
   combo: number;
   boss?: Boss;
   mail?: Mail;
+  /** Horde only: how the call compares with the safe recommendation. */
+  verdict?: Verdict;
 }
 
 const COMBO_WINDOW_MS = 2500;
 const MAX_COMBO = 8;
+/** A call that matches the safe recommendation earns this on top, times the combo. */
+export const SHARP_BONUS = 50;
+/** Enough horde calls, none missed: the Eagle Eye medal. */
+export const EAGLE_MIN_CALLS = 5;
 export const MIN_BOSS_EMAILS = 3;
 const MAX_BOSSES = 20;
 /** A real inbox can hold thousands of one-off emails; one raid takes the newest ones. */
@@ -79,6 +89,7 @@ interface Snapshot {
   stress: number;
   stats: Stats;
   quests: number;
+  missed: number;
   bossStatus: BossStatus | null;
   lastActionAt: number;
   /** Exact queue order before the hit, including an out-of-order board pick. */
@@ -97,9 +108,11 @@ export class Raid {
   /** 0..100. Fills while you hesitate, drains when you act. */
   stress = 0;
   quests: Mail[] = [];
+  /** Emails that looked like they needed the player but were archived or trashed. */
+  missed: Mail[] = [];
   readonly badges = new Set<BadgeId>();
   private draftedIds = new Set<string>();
-  stats: Stats = { archived: 0, trashed: 0, starred: 0, unsubscribed: 0, bossesDown: 0, spared: 0, maxCombo: 1, drafts: 0 };
+  stats: Stats = { archived: 0, trashed: 0, starred: 0, unsubscribed: 0, bossesDown: 0, spared: 0, maxCombo: 1, drafts: 0, calls: 0, sharp: 0 };
   startedAt = performance.now();
   endedAt = 0;
   private lastActionAt = 0;
@@ -179,7 +192,7 @@ export class Raid {
    * any card in the queue). It is moved to the front for the hit; the snapshot keeps the
    * original order so undo can put every card back exactly where it was.
    */
-  hitMail(move: HordeMove, id?: string): Hit | null {
+  hitMail(move: HordeMove, id?: string, verdict?: Verdict): Hit | null {
     if (this.phase !== 'horde') return null;
     const at = id
       ? this.horde.findIndex((m, i) => i >= this.hordeIdx && m.id === id)
@@ -190,7 +203,10 @@ export class Raid {
     const mail = this.mail;
     if (!mail) return null;
     const combo = this.bumpCombo(this.hordeComboWindowMs);
-    const points = (move === 'star' ? 50 : 100) * combo;
+    const points = ((move === 'star' ? 50 : 100) + (verdict === 'sharp' ? SHARP_BONUS : 0)) * combo;
+    this.stats.calls++;
+    if (verdict === 'sharp') this.stats.sharp++;
+    if (verdict === 'missed') this.missed.push(mail);
     if (move === 'archive') this.stats.archived++;
     else if (move === 'trash') this.stats.trashed++;
     else { this.stats.starred++; this.quests.push(mail); }
@@ -201,7 +217,7 @@ export class Raid {
     this.hordeIdx++;
     if (this.hordeIdx >= this.horde.length) this.phase = 'done';
     this.finishIfDone();
-    const hit: Hit = { kind: move, ids: [mail.id], points, combo, mail };
+    const hit: Hit = { kind: move, ids: [mail.id], points, combo, mail, verdict };
     this.history.push({ ...snap, hit });
     return hit;
   }
@@ -222,6 +238,11 @@ export class Raid {
   /** Badges to show right now: INBOX ZERO only while the inbox really is at zero. */
   get shownBadges(): BadgeId[] {
     return [...this.badges].filter((id) => id !== 'zero' || this.inboxLeft === 0);
+  }
+
+  /** Eagle Eye: a real horde, every call safe. */
+  get eagleEye(): boolean {
+    return this.phase === 'done' && this.stats.calls >= EAGLE_MIN_CALLS && this.missed.length === 0;
   }
 
   unlockBadge(id: BadgeId): boolean {
@@ -249,6 +270,7 @@ export class Raid {
     this.stress = s.stress;
     this.stats = s.stats;
     this.quests.length = s.quests;
+    this.missed.length = s.missed;
     this.lastActionAt = s.lastActionAt;
     this.horde.splice(0, this.horde.length, ...s.horde);
     if (s.hit.boss && s.bossStatus) s.hit.boss.status = s.bossStatus;
@@ -296,7 +318,7 @@ export class Raid {
     return {
       phase: this.phase, bossIdx: this.bossIdx, hordeIdx: this.hordeIdx, inboxLeft: this.inboxLeft,
       score: this.score, combo: this.combo, stress: this.stress, stats: { ...this.stats },
-      quests: this.quests.length, bossStatus, lastActionAt: this.lastActionAt, horde: [...this.horde],
+      quests: this.quests.length, missed: this.missed.length, bossStatus, lastActionAt: this.lastActionAt, horde: [...this.horde],
     };
   }
 }

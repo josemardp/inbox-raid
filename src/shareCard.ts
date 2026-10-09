@@ -13,7 +13,7 @@ const SITE = 'josemardp.github.io/inbox-raid';
 const C = { void: '#0a1024', navy: '#111d3c', panel: '#eef3fa', ink: '#0d1830', muted: '#5b6884', light: '#c7d2e6', blue: '#1f8bff', cyan: '#5fd3ec', coral: '#ff6e67', gold: '#ffd35c', tile: '#dce5f2' };
 
 const badgeLabel = (id: BadgeId) => ({
-  critical: t('badge.critical'), combo: t('badge.combo'), zero: t('badge.zero'),
+  critical: t('badge.critical'), combo: t('badge.combo'), zero: t('badge.zero'), eagle: t('badge.eagle'),
 })[id];
 
 function clock(ms: number): string {

@@ -11,6 +11,8 @@ import './style.css';
 import { comboSfx, drainSfx, fanfare, isMuted, music, sfx, toggleMute, unlockAudio } from './audio';
 import { bindBoard } from './board';
 import { briefingOpen, openBriefing } from './briefing';
+import { judgeCall } from './calls';
+import { levelFor } from './score';
 import { isPerson } from './classifier';
 import { makeDial } from './dials';
 import { esc, redact } from './html';
@@ -60,9 +62,10 @@ const CYAN = '#75dbf3';
 const BLUE = '#4aa3ff';
 const CORAL = '#ff6e67';
 const WHITE = '#f2f7fd';
+const GOLD = '#ffd35c';
 
 function badgeText(id: BadgeId): string {
-  return { critical: t('badge.critical'), combo: t('badge.combo'), zero: t('badge.zero') }[id];
+  return { critical: t('badge.critical'), combo: t('badge.combo'), zero: t('badge.zero'), eagle: t('badge.eagle') }[id];
 }
 
 function earnBadge(id: BadgeId) {
@@ -189,6 +192,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Fight screens show the console of dials between the two panels; the rest use the full width. */
 function layout(v: typeof view) {
   view = v;
+  document.body.dataset.view = v;
   const fight = v === 'boss' || v === 'horde';
   arena.className = fight ? 'fight' : 'wide';
   stack.hidden = !fight;
@@ -229,6 +233,8 @@ function updateHud() {
   const gear = combo.parentElement!;
   gear.classList.toggle('hot', raid.combo >= 5 && view !== 'clear');
   gear.classList.toggle('max', raid.combo >= 8 && view !== 'clear');
+  // The combo earns the horde its layers: hats, then the lead, then the lead an octave up.
+  if (view === 'horde') music.setLevel(levelFor(raid.combo));
 }
 
 let lastTick = performance.now();
@@ -240,6 +246,11 @@ function hudLoop(tm: number) {
     // A briefing stops the clock (the time is given back when it closes).
     if (!briefingOpen()) $('#time').textContent = clock(raid.elapsedMs);
     dialStress.update(raid.stress / 100);
+    const band = Math.floor(raid.stress / 34);
+    if (view === 'boss' && band > stressBand && !busy) bossLunge(band);
+    stressBand = band;
+    // Past a third of the gauge, the song starts to go muffled.
+    music.setPressure((raid.stress - 30) / 70);
   }
   if (raid && !stack.hidden) {
     const start = Math.max(1, raid.inboxStart);
@@ -253,6 +264,27 @@ requestAnimationFrame(hudLoop);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) { raid?.resetIdle(); lastTick = performance.now(); }
 });
+
+/** Which third of the stress gauge we are in: crossing into the next one makes the boss lunge. */
+let stressBand = 0;
+
+/** A hesitating player gets lunged at. Demo bosses also talk back; a real sender never gets invented words. */
+function bossLunge(band: number) {
+  const sprite = screen.querySelector<HTMLElement>('.boss-sprite');
+  if (!sprite) return;
+  sprite.classList.remove('lunge');
+  void sprite.offsetWidth; // restart the animation
+  sprite.classList.add('lunge');
+  sfx('boss', 1.15);
+  shake(5, 220);
+  const bubble = screen.querySelector<HTMLElement>('.boss-taunt');
+  if (bubble && source.isDemo) {
+    bubble.textContent = t(band >= 2 ? 'boss.press2' : 'boss.press1');
+    bubble.classList.remove('again');
+    void bubble.offsetWidth;
+    bubble.classList.add('again');
+  }
+}
 
 function overload() {
   sfx('overload');
@@ -296,6 +328,7 @@ function showTitle() {
           </button>`).join('')}
       </div>
       ${best ? `<p class="best">${t('title.best')} <b>${fmt(best)}</b></p>` : ''}
+      <p class="fine phone-only">${t('title.fine')}</p>
     </section>`;
   controls.innerHTML = `
     <div class="row four">
@@ -324,6 +357,13 @@ function writeBest(n: number) {
 
 /** The high score before this raid ended: saved on the final screen, put back if the player undoes. */
 let bestBefore = 0;
+
+/** Sharp calls as a segment bar: lit for sharp, dim for the rest. */
+function callBar(sharp: number, calls: number): string {
+  const n = Math.min(calls, 20);
+  const on = Math.round((sharp / Math.max(1, calls)) * n);
+  return `<div class="segbar calls-bar" style="--n:${n}">${Array.from({ length: n }, (_, i) => (i < on ? '<i></i>' : '<i class="off"></i>')).join('')}</div>`;
+}
 
 function segments(n: number, id = ''): string {
   return `<div class="segbar" ${id ? `id="${id}"` : ''} style="--n:${n}">${'<i></i>'.repeat(n)}</div>`;
@@ -394,10 +434,10 @@ async function startRaid(src: InboxSource) {
 function next() {
   if (!raid) return;
   if (raid.phase === 'done') return showClear();
-  // Bosses at 132 bpm, the horde faster; an undo across phases switches back.
-  const bpm = raid.phase === 'boss' ? 132 : 152;
-  if (music.playing && music.bpm !== bpm) music.stop();
-  if (!music.playing) music.start(bpm);
+  // A tense boss theme, a faster horde theme; an undo across phases switches back.
+  const section = raid.phase === 'boss' ? 'boss' : 'horde';
+  music.setLevel(section === 'boss' ? 1 : levelFor(raid.combo));
+  music.start(section);
   if (raid.phase === 'boss') showBoss();
   else showHorde();
 }
@@ -581,7 +621,7 @@ async function hordeMove(move: HordeMove) {
   const el = $('.card.live');
   const [x, y] = centreOf($('.card-sprite'));
   const comboBefore = r.combo;
-  const hit = r.hitMail(move)!;
+  const hit = r.hitMail(move, undefined, judgeCall(r.mail!, move))!;
   el.classList.add(`fly-${move}`);
   $('.card-sprite').classList.add('dead');
   await landHit(hit, comboBefore, x, y, src, run);
@@ -599,6 +639,9 @@ async function landHit(hit: Hit, comboBefore: number, x: number, y: number, src:
   if (hit.combo > 1) comboSfx(hit.combo);
   shake(3 + hit.combo, 150);
   floatText(x, y - 30, `+${fmt(hit.points)}${hit.combo > 1 ? ` x${hit.combo}` : ''}`, CYAN, 18 + hit.combo);
+  // The call is judged out loud, but a missed one costs nothing: the report lists it instead.
+  if (hit.verdict === 'sharp') floatText(x, y + 24, t('fx.sharp'), GOLD, 16);
+  else if (hit.verdict === 'missed') floatText(x, y + 24, t('fx.check'), CORAL, 15);
   // Stamped once on the way up, not on every card while the combo stays maxed.
   if ((hit.combo === 5 || hit.combo === 8) && comboBefore < hit.combo) stamp(hit.combo === 8 ? t('fx.combo8') : t('fx.combo5'), CYAN);
   await wait(170);
@@ -713,7 +756,8 @@ async function boardMove(move: HordeMove, id: string, dragged: boolean) {
   if (!dragged) screen.querySelector(`.mini-card[data-id="${CSS.escape(id)}"]`)?.classList.add(`zap-${move}`);
   else screen.querySelector(`.mini-card[data-id="${CSS.escape(id)}"]`)?.classList.add('gone');
   const comboBefore = r.combo;
-  const hit = r.hitMail(move, id);
+  const target = r.horde.find((m) => m.id === id);
+  const hit = r.hitMail(move, id, target && judgeCall(target, move));
   if (!hit) { busy = false; return; }
   const [x, y] = centreOf(zoneEl);
   await landHit(hit, comboBefore, x, y, src, run);
@@ -783,6 +827,7 @@ function showClear() {
   layout('clear');
   music.stop();
   if (source.isDemo && r.inboxLeft === 0) earnBadge('zero');
+  if (r.eagleEye) earnBadge('eagle');
   fanfare();
   recStopSoon();
   // Leftover stamps and score pops must not cover the result.
@@ -840,6 +885,14 @@ function renderClear() {
         ${stat(t('clear.score'), fmt(r.score), true)}
       </dl>
       ${r.shownBadges.length ? `<div class="badges"><p class="hp-label">${t('clear.badges')}</p><ul>${r.shownBadges.map((id) => `<li>★ ${badgeText(id)}</li>`).join('')}</ul></div>` : ''}
+      ${r.stats.calls ? `
+        <div class="calls"><p class="hp-label">${t('clear.calls')} · <b>${r.stats.sharp}/${r.stats.calls}</b> <span>${t('clear.callsSub')}</span></p>
+        ${callBar(r.stats.sharp, r.stats.calls)}</div>` : ''}
+      ${r.missed.length ? `
+        <div class="missed"><p class="hp-label">${t('clear.missed')}</p>
+        <ul>${r.missed.slice(0, 3).map((m) => `<li>&#9873; <b>${who(m.fromName, true)}</b> ${what(m.subject)}</li>`).join('')}
+        ${r.missed.length > 3 ? `<li class="dim">${t('clear.more', { n: r.missed.length - 3 })}</li>` : ''}</ul>
+        <p class="drafts dim">${t('clear.missedSub')}</p></div>` : ''}
       ${r.quests.length ? `
         <div class="quests"><p class="hp-label">${t('clear.quests')}</p>
         ${r.stats.drafts ? `<p class="drafts">&#10022; ${source.isDemo ? t('clear.draftsDemo', { n: r.stats.drafts }) : t('clear.drafts', { n: r.stats.drafts })}</p>` : ''}

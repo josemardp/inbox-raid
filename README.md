@@ -49,7 +49,7 @@ npm test         # game rules and Gmail layer, with a fake Gmail
 npm run build
 ```
 
-Stack: Vite + TypeScript, no framework. Sound effects with [ZzFX](https://github.com/KilledByAPixel/ZzFX), music generated with WebAudio, monsters generated from each sender's address, font [Press Start 2P](https://fonts.google.com/specimen/Press+Start+2P) (OFL).
+Stack: Vite + TypeScript, no framework. Sound effects with [ZzFX](https://github.com/KilledByAPixel/ZzFX), music generated with WebAudio, monsters generated from each sender's address, fonts [Space Grotesk](https://fonts.google.com/specimen/Space+Grotesk) and [DM Mono](https://fonts.google.com/specimen/DM+Mono) (OFL, bundled with the site).
 
 Built solo during the yard week with [Claude Code](https://claude.com/claude-code).
 

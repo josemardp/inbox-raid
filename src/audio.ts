@@ -1,4 +1,8 @@
 import { ZZFX, zzfx } from 'zzfx';
+import { BPM, makeNoise, playStep, type Level, type Section, type Voices } from './score';
+
+const OPEN_HZ = 14000;
+const CLOSED_HZ = 900;
 
 // Sound effects are ZzFX parameter lists, generated in code (no audio files, no licensing).
 type Params = (number | undefined)[];
@@ -78,49 +82,42 @@ export function fanfare() {
     setTimeout(() => play([0.9, 0, 523 * 2 ** (semi / 12), 0.01, 0.08, 0.25, 1, 1.2]), i * 110));
 }
 
-// --- Chiptune loop -------------------------------------------------------
-// Am F C G, square bass + triangle arpeggio, scheduled ahead on the WebAudio clock.
+// --- Soundtrack ----------------------------------------------------------
+// The notes live in score.ts; this schedules them ahead on the WebAudio clock.
 
 const ctx = ZZFX.audioContext;
 const master = ctx.createGain();
 master.gain.value = muted ? 0 : 0.9;
 master.connect(ctx.destination);
-// The music runs through a gentle low-pass, so the square bass sounds warm, not buzzy.
-const musicBus = ctx.createBiquadFilter();
-musicBus.type = 'lowpass';
-musicBus.frequency.value = 2600;
-musicBus.Q.value = 0.5;
-musicBus.connect(master);
-
-const midi = (n: number) => 440 * 2 ** ((n - 69) / 12);
-const CHORDS = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];
-
-function note(freq: number, start: number, dur: number, type: OscillatorType, vol: number) {
-  const o = ctx.createOscillator();
-  const g = ctx.createGain();
-  o.type = type;
-  o.frequency.value = freq;
-  // A 5 ms fade-in: an instant start clicks across the whole spectrum.
-  g.gain.setValueAtTime(0.0001, start);
-  g.gain.linearRampToValueAtTime(vol, start + 0.005);
-  g.gain.exponentialRampToValueAtTime(0.001, start + dur);
-  o.connect(g).connect(musicBus);
-  o.onended = () => { o.disconnect(); g.disconnect(); };
-  o.start(start);
-  o.stop(start + dur + 0.02);
-}
+// Stress closes this filter: under pressure the whole song goes muffled, as if underwater.
+const pressure = ctx.createBiquadFilter();
+pressure.type = 'lowpass';
+pressure.frequency.value = OPEN_HZ;
+pressure.Q.value = 0.7;
+pressure.connect(master);
+// Melodic parts run through a gentle low-pass, so the square bass sounds warm, not buzzy.
+const warm = ctx.createBiquadFilter();
+warm.type = 'lowpass';
+warm.frequency.value = 3400;
+warm.Q.value = 0.5;
+warm.connect(pressure);
+const voices: Voices = { ctx, tone: warm, dry: pressure, noise: makeNoise(ctx) };
 
 class Music {
   private timer = 0;
   private step = 0;
   private nextAt = 0;
-  bpm = 132;
+  section: Section = 'boss';
+  private level: Level = 1;
 
   get playing() { return this.timer !== 0; }
+  get bpm() { return BPM[this.section]; }
 
-  start(bpm = this.bpm) {
-    this.bpm = bpm;
+  start(section = this.section) {
+    if (this.timer && section !== this.section) this.stop();
+    this.section = section;
     if (muted || this.timer) return;
+    this.step = 0;
     this.nextAt = ctx.currentTime + 0.05;
     this.timer = window.setInterval(() => this.schedule(), 25);
   }
@@ -130,20 +127,25 @@ class Music {
     this.timer = 0;
   }
 
+  /** Layers earned by the combo join on the next sixteenth. */
+  setLevel(level: Level) { this.level = level; }
+
+  /** 0..1: how much the stress muffles the song. */
+  setPressure(p: number) {
+    const hz = OPEN_HZ * (CLOSED_HZ / OPEN_HZ) ** Math.min(1, Math.max(0, p));
+    if (Math.abs(hz - this.hz) / this.hz < 0.03) return;
+    this.hz = hz;
+    pressure.frequency.setTargetAtTime(hz, ctx.currentTime, 0.12);
+  }
+  private hz = OPEN_HZ;
+
   private schedule() {
     if (document.hidden) return; // nobody is listening; resumes from now when the tab is back
-    const sixteenth = 60 / this.bpm / 4;
     // After a hidden or frozen tab, skip the missed notes instead of playing them all at once.
     if (this.nextAt < ctx.currentTime) this.nextAt = ctx.currentTime + 0.05;
     while (this.nextAt < ctx.currentTime + 0.12) {
-      const bar = Math.floor(this.step / 16) % 4;
-      const s = this.step % 16;
-      const chord = CHORDS[bar];
-      if (s % 4 === 0) note(midi(chord[0] - 24 + (s === 8 ? 12 : 0)), this.nextAt, sixteenth * 3, 'square', 0.07);
-      if (s % 2 === 0) note(midi(chord[(s / 2) % 3] + 12), this.nextAt, sixteenth * 1.5, 'triangle', 0.06);
-      // A soft low pulse on the beat instead of a bright click.
-      if (s % 4 === 0) note(58, this.nextAt, 0.12, 'sine', 0.09);
-      this.nextAt += sixteenth;
+      playStep(voices, this.nextAt, this.step, this.section, this.level);
+      this.nextAt += 60 / BPM[this.section] / 4;
       this.step++;
     }
   }
