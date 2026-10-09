@@ -144,6 +144,12 @@ export class Raid {
   /** Hesitation does not count while the tab is hidden. */
   resetIdle() { this.idleSince = performance.now(); }
 
+  /** 0..1: how far into the grace period the player has hesitated, before stress starts counting. */
+  get hesitation(): number {
+    const grace = this.phase === 'boss' ? 6000 : 3500;
+    return Math.max(0, Math.min(1, (performance.now() - this.idleSince) / grace));
+  }
+
   /** Time spent waiting for Gmail is not the player's: it costs no combo and no stress. */
   waited(ms: number) {
     this.lastActionAt += ms;

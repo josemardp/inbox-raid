@@ -24,7 +24,12 @@ function add<K extends keyof SVGElementTagNameMap>(svg: SVGSVGElement, tag: K, a
   return el;
 }
 
-export interface Dial { update(fraction: number, big?: string, sub?: string): void }
+export interface Dial {
+  /** `needleAt` lets the needle read something livelier than the arc (it defaults to the arc). */
+  update(fraction: number, big?: string, sub?: string, needleAt?: number): void;
+}
+
+const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export function makeDial(svg: SVGSVGElement, { ticks = 10, red = 0, needle = false, big = false } = {}): Dial {
   svg.setAttribute('viewBox', '0 0 200 200');
@@ -44,18 +49,33 @@ export function makeDial(svg: SVGSVGElement, { ticks = 10, red = 0, needle = fal
   const bigText = big ? add(svg, 'text', { x: C, y: C + 12, class: 'dial-big' }) : null;
   const subText = big ? add(svg, 'text', { x: C, y: C + 36, class: 'dial-sub' }) : null;
   let last = -1;
+  // The needle is a damped spring with an engine tremor, like a rev counter: it swings to its
+  // reading, overshoots a little and never sits dead still while the raid runs.
+  let pos = 0;
+  let vel = 0;
+  let prev = performance.now();
   return {
-    update(fraction, bigValue, subValue) {
+    update(fraction, bigValue, subValue, needleAt = fraction) {
       const f = Math.max(0, Math.min(1, fraction));
       if (Math.abs(f - last) > 0.001) {
         last = f;
         value.setAttribute('d', arc(A0, A0 + SWEEP * f, R - 8));
         value.classList.toggle('hot', !!red && f >= red);
-        if (hand) {
-          const [nx, ny] = pt(A0 + SWEEP * f, R - 26);
-          hand.setAttribute('x2', nx.toFixed(2));
-          hand.setAttribute('y2', ny.toFixed(2));
+      }
+      if (hand) {
+        const now = performance.now();
+        const dt = Math.min((now - prev) / 1000, 0.05);
+        prev = now;
+        const target = Math.max(0, Math.min(1, needleAt));
+        if (still()) pos = target;
+        else {
+          vel += ((target - pos) * 160 - vel * 13) * dt;
+          pos = Math.max(-0.02, Math.min(1.02, pos + vel * dt));
         }
+        const shake = still() ? 0 : (0.5 + 3 * pos * pos) * (Math.sin(now / 21) + Math.sin(now / 13)) / 2;
+        const [nx, ny] = pt(A0 + SWEEP * pos + shake, R - 26);
+        hand.setAttribute('x2', nx.toFixed(2));
+        hand.setAttribute('y2', ny.toFixed(2));
       }
       if (bigText && bigValue !== undefined && bigText.textContent !== bigValue) bigText.textContent = bigValue;
       if (subText && subValue !== undefined && subText.textContent !== subValue) subText.textContent = subValue;

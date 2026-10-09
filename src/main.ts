@@ -245,7 +245,8 @@ function hudLoop(tm: number) {
     if (!busy && !needsAuth && raid.tick(dt)) overload();
     // A briefing stops the clock (the time is given back when it closes).
     if (!briefingOpen()) $('#time').textContent = clock(raid.elapsedMs);
-    dialStress.update(raid.stress / 100);
+    // The needle creeps up while the player hesitates, before stress really counts, and drops on a hit.
+    dialStress.update(raid.stress / 100, undefined, undefined, Math.max(raid.stress / 100, raid.hesitation * 0.3));
     const band = Math.floor(raid.stress / 34);
     if (view === 'boss' && band > stressBand && !busy) bossLunge(band);
     stressBand = band;
